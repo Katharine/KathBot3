@@ -87,6 +87,7 @@ class IRC(threading.Thread):
             data = (buff + data).split("\n")
             buff = data.pop()
             for line in data:
+                line = line.strip()
                 logging.debug("<-%s\t%s" % (self.network.server, line))
                 self.handle(line)
 
@@ -96,13 +97,15 @@ class Network:
     nicks = ()
     realname = ''
     ident = ''
+    primary_channel = None
     
-    def __init__(self, server='', port=6667, nicks=(), realname='', ident=''):
+    def __init__(self, server='', port=6667, nicks=(), realname='', ident='', primary_channel=None):
         self.server = server
         self.port = port
         self.nicks = nicks
         self.realname = realname
         self.ident = ident
+        self.primary_channel = primary_channel
 
 class User:
     host = ''

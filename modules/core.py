@@ -1,8 +1,11 @@
 import logging
+import modules
 
 def init():
     add_hook('ping', ping)
     add_hook('error', server_disconnect)
+    add_hook('001', connected)
+    add_hook('privmsg', privmsg)
 
 def ping(irc, origin, args):
     irc.raw("PONG :%s" % args[0])
@@ -10,3 +13,41 @@ def ping(irc, origin, args):
 def server_disconnect(irc, origin, args):
     irc.disconnect(forced=True)
     logging.error("Disconnected from %s" % irc.network.server)
+
+def connected(irc, origin, args):
+    if irc.network.primary_channel:
+        m('irc_helpers').join(irc, irc.network.primary_channel)
+    
+    modules.call_hook('connected', irc)
+    logging.info("Completed connecting to %s" % irc.network.server)
+
+def privmsg(irc, origin, args):
+    irc_helpers = m('irc_helpers')
+    target = args[0]
+    args = args[1].split(' ')
+    if args[0] == "KB3" and len(args) >= 2:
+        command = args[1].lower()
+        args = args[2:]
+        if command == 'ping':
+            irc_helpers.message(irc, target, "PONG! :D")
+        elif command == 'load':
+            for module in args:
+                try:
+                    modules.load_module(module)
+                except Exception, msg:
+                    irc_helpers.message(irc, target, "Couldn't load %s: %s" % (module, msg))
+                else:
+                    irc_helpers.message(irc, target, "Loaded %s" % module)
+        elif command == 'unload':
+            for module in args:
+                modules.unload_module(module)
+                irc_helpers.message(irc, target, "Unloaded %s" % module)
+        elif command == 'reload':
+            for module in args:
+                try:
+                    modules.unload_module(module)
+                    modules.load_module(module)
+                except Exception, msg:
+                    irc_helpers.message(irc, target, "Couldn't reload %s: %s" % (module, msg))
+                else:
+                    irc_helpers.message(irc, target, "Reloaded %s" % module)
