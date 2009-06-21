@@ -8,5 +8,5 @@ networks = {
         realname="Katharine's third bot!",
         ident='kathbot3',
         primary_channel='#anything',
-    )
+    ),
 }

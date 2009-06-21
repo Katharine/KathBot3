@@ -9,3 +9,12 @@ def join(irc, channel):
 
 def part(irc, channel, reason=""):
     irc.raw("PART %s :%s" % (channel, reason))
+    
+def parse(args):
+    line = m('core').check_prefix(args[1])
+    if not line:
+        return None, None, None
+    
+    line = line.split(' ')
+    command = line.pop(0)
+    return args[0], command, line

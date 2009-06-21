@@ -58,7 +58,7 @@ class IRC(threading.Thread):
     def handle(self, line):
         origin = None
         if line[0] == ':':
-            hostmask, line = line.split(' ', 1)
+            hostmask, line = line[1:].split(' ', 1)
             parts = hostmask.split('!', 1)
             origin = User(nick=parts[0])
             if len(parts) > 1:
@@ -113,6 +113,9 @@ class User:
     ident = ''
     
     def __init__(self, host='', nick='', ident=''):
-        self.host = host
+        self.hostname = host
         self.nick = nick
         self.ident = ident
+        
+    def __str__(self):
+        return "%s!%s@%s" % (self.nick, self.ident, self.hostname)

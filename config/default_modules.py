@@ -1,2 +1,7 @@
 # irc_helpers should/must always be first.
-modules = ('irc_helpers', 'core')
+modules = (
+    'irc_helpers',
+    'core',
+    'datastore',
+    'security',
+)

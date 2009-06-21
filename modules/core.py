@@ -29,7 +29,7 @@ def privmsg(irc, origin, args):
         command = args[1].lower()
         args = args[2:]
         if command == 'ping':
-            irc_helpers.message(irc, target, "PONG! :D")
+            irc_helpers.message(irc, target, "PONG!")
         elif command == 'load':
             for module in args:
                 try:
@@ -51,3 +51,12 @@ def privmsg(irc, origin, args):
                     irc_helpers.message(irc, target, "Couldn't reload %s: %s" % (module, msg))
                 else:
                     irc_helpers.message(irc, target, "Reloaded %s" % module)
+        elif command == 'terminate':
+            quit()
+
+# Other useful "core"-like methods.
+
+def check_prefix(line):
+    if line.startswith("!"):
+        return line[1:]
+    return None

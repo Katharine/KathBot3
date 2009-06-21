@@ -58,5 +58,10 @@ def unload_module(module):
         if hooks[hook].get(module):
             del hooks[hook][module]
     
+    try:
+        modules[module].shutdown()
+    except:
+        pass
+    
     del mods[module]
     del sys.modules['modules.%s' % module]
