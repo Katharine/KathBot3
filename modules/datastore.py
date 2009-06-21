@@ -23,8 +23,8 @@ class sqlite(threading.Thread):
                 if result:
                     result.put(cursor.fetchall())
                 else:
-                    cursor.commit()
-            except sqlite3.OperationalError, message:
+                    connection.commit()
+            except (sqlite3.OperationalError, sqlite3.InterfaceError), message:
                 if result:
                     result.put([])
                 logger.error("SQL error: %s" % message)
@@ -57,3 +57,8 @@ def query(sql, *args):
     global query_count
     query_count += 1
     return connection.select(sql, args)
+
+def execute(sql, *args):
+    global query_count
+    query_count += 1
+    connection.execute(sql, args)

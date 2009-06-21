@@ -5,4 +5,6 @@ modules = (
     'datastore',
     'security',
     'chantrack',
+    'chanmanage',
+    'irclogger'
 )

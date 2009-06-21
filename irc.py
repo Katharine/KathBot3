@@ -36,10 +36,10 @@ class IRC(threading.Thread):
     def raw(self, message):
         if not self.socket:
             raise ConnectionNotReady
+        logging.debug("->%s\t%s" % (self.network, message))
         self.writelock.acquire()
         self.socket.send("%s\n" % message)
         self.writelock.release()
-        logging.debug("->%s\t%s" % (self.network, message))
         
     def disconnected(self):
         modules.call_hook('disconnected')

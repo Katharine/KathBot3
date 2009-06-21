@@ -11,7 +11,10 @@ class IRCHandler(logging.Handler):
     def emit(self, record):
         for network in networks:
             irc = networks[network]
-            m('irc_helpers').message(irc, irc.network.primary_channel, self.format(record))
+            try:
+                m('irc_helpers').message(irc, irc.network.primary_channel, self.format(record))
+            except:
+                pass
 
 def init():
     global handler

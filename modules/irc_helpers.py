@@ -11,8 +11,11 @@ def notice(irc, target, msg, fmt=True):
         msg = format(msg)
     irc.raw("NOTICE %s: %s" % (target, msg))
 
-def join(irc, channel):
-    irc.raw("JOIN %s" % channel)
+def join(irc, channel, passkey=None):
+    if passkey:
+        irc.raw("JOIN %s %s" % (channel, passkey))
+    else:
+        irc.raw("JOIN %s" % channel)
 
 def part(irc, channel, reason=""):
     irc.raw("PART %s :%s" % (channel, reason))

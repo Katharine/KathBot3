@@ -49,8 +49,12 @@ def userlist(irc, origin, args):
 
 def part(irc, origin, args):
     channel = args[0].lower()
-    del network(irc)[channel].users[origin.nick.lower()]
-    logger.info("Removed nick %s from %s/%s" % (origin.nick, irc.network, channel))
+    if irc.nick == origin.nick:
+        del network(irc)[channel]
+        logger.info("Removed channel %s/%s" % (irc.network, channel))
+    else:
+        del network(irc)[channel].users[origin.nick.lower()]
+        logger.info("Removed nick %s from %s/%s" % (origin.nick, irc.network, channel))
 
 def kick(irc, origin, args):
     channel = args[0].lower()

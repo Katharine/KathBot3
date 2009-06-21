@@ -26,10 +26,12 @@ def privmsg(irc, origin, args):
     args = args[1].split(' ')
     if args[0] == "KB3" and len(args) >= 2:
         command = args[1].lower()
-        if m('security'):
+        try:
             if not m('security').check_action_permissible(origin, "kb3:%s" % command):
                 irc_helpers.message(irc, target, "You do not have the required access level to do this.")
                 return
+        except ModuleNotLoaded:
+            pass
         
         args = args[2:]
         if command == 'ping':

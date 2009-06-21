@@ -43,6 +43,7 @@ def load_module(module):
     mods[module].add_hook = lambda hook, function: add_hook(module, hook, function)
     mods[module].remove_hook = lambda hook: remove_hook(module, hook)
     mods[module].m = lambda module: get_module(module)
+    mods[module].ModuleNotLoaded = ModuleNotLoaded
     mods[module].logger = logging.getLogger(module)
     try:
         init_module = getattr(mods[module], 'init')
