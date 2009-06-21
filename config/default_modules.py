@@ -4,4 +4,5 @@ modules = (
     'core',
     'datastore',
     'security',
+    'chantrack',
 )

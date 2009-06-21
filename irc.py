@@ -10,6 +10,7 @@ class IRC(threading.Thread):
     socket = None
     connected = False
     writelock = threading.Lock()
+    nick = ''
 
     def __init__(self, network):
         if not isinstance(network, Network):
@@ -27,7 +28,8 @@ class IRC(threading.Thread):
             return
         logging.info("Connected.")
         self.raw("USER 8 * %s: %s" % (self.network.ident, self.network.realname))
-        self.raw("NICK %s" % self.network.nicks[0])
+        self.nick = self.network.nicks[0]
+        self.raw("NICK %s" % self.nick)
         self.connected = True
         self.mainloop()
         
@@ -37,11 +39,11 @@ class IRC(threading.Thread):
         self.writelock.acquire()
         self.socket.send("%s\n" % message)
         self.writelock.release()
-        logging.debug("->%s\t%s" % (self.network.server, message))
+        logging.debug("->%s\t%s" % (self.network, message))
         
     def disconnected(self):
         modules.call_hook('disconnected')
-        logging.warn("Disconnected from %s." % self.network.server)
+        logging.warn("Disconnected from %s." % self.network)
         
     def disconnect(self, forced=False, reason=""):
         if not forced:
@@ -88,7 +90,7 @@ class IRC(threading.Thread):
             buff = data.pop()
             for line in data:
                 line = line.strip()
-                logging.debug("<-%s\t%s" % (self.network.server, line))
+                logging.debug("<-%s\t%s" % (self.network, line))
                 self.handle(line)
 
 class Network:
@@ -98,15 +100,20 @@ class Network:
     realname = ''
     ident = ''
     primary_channel = None
+    name = ''
     
-    def __init__(self, server='', port=6667, nicks=(), realname='', ident='', primary_channel=None):
+    def __init__(self, server='', port=6667, nicks=None, realname='', ident='', primary_channel=None, name=''):
         self.server = server
         self.port = port
         self.nicks = nicks
         self.realname = realname
         self.ident = ident
         self.primary_channel = primary_channel
-
+        self.name = name
+        
+    def __str__(self):
+        return self.name
+    
 class User:
     host = ''
     nick = ''

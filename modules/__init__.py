@@ -60,7 +60,7 @@ def unload_module(module):
             del hooks[hook][module]
     
     try:
-        modules[module].shutdown()
+        mods[module].shutdown()
     except:
         pass
     

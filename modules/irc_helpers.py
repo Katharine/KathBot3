@@ -1,7 +1,14 @@
-def message(irc, target, msg):
+def format(msg):
+    return msg.replace('~B', chr(2)).replace('~U', chr(31)).replace('~I', chr(22))
+
+def message(irc, target, msg, fmt=True):
+    if fmt:
+        msg = format(msg)
     irc.raw("PRIVMSG %s :%s" % (target, msg))
 
-def notice(irc, target, msg):
+def notice(irc, target, msg, fmt=True):
+    if fmt:
+        msg = format(msg)
     irc.raw("NOTICE %s: %s" % (target, msg))
 
 def join(irc, channel):

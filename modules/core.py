@@ -55,6 +55,9 @@ def privmsg(irc, origin, args):
                     irc_helpers.message(irc, target, "Couldn't reload %s: %s" % (module, msg))
                 else:
                     irc_helpers.message(irc, target, "Reloaded %s" % module)
+        elif command == 'raw':
+            irc.raw(' '.join(args))
+            irc_helpers.message(irc, target, "Sent message.")
         elif command == 'terminate':
             quit()
 
