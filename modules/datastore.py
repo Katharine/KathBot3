@@ -17,12 +17,17 @@ class sqlite(threading.Thread):
             if request == '__close__':
                 break
             
-            cursor.execute(request, args)
-            
-            if result:
-                result.put(cursor.fetchall())
-            else:
-                cursor.commit()
+            try:
+                cursor.execute(request, args)
+                
+                if result:
+                    result.put(cursor.fetchall())
+                else:
+                    cursor.commit()
+            except sqlite3.OperationalError, message:
+                if result:
+                    result.put([])
+                logger.error("SQL error: %s" % message)
             
             cursor.close()
         connection.close()

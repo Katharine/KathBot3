@@ -1,4 +1,3 @@
-import logging
 import modules
 
 def init():
@@ -12,14 +11,14 @@ def ping(irc, origin, args):
     
 def server_disconnect(irc, origin, args):
     irc.disconnect(forced=True)
-    logging.error("Disconnected from %s" % irc.network.server)
+    logger.error("Disconnected from %s" % irc.network.server)
 
 def connected(irc, origin, args):
     if irc.network.primary_channel:
         m('irc_helpers').join(irc, irc.network.primary_channel)
     
     modules.call_hook('connected', irc)
-    logging.info("Completed connecting to %s" % irc.network.server)
+    logger.info("Completed connecting to %s" % irc.network.server)
 
 def privmsg(irc, origin, args):
     irc_helpers = m('irc_helpers')
@@ -27,6 +26,11 @@ def privmsg(irc, origin, args):
     args = args[1].split(' ')
     if args[0] == "KB3" and len(args) >= 2:
         command = args[1].lower()
+        if m('security'):
+            if not m('security').check_action_permissible(origin, "kb3:%s" % command):
+                irc_helpers.message(irc, target, "You do not have the required access level to do this.")
+                return
+        
         args = args[2:]
         if command == 'ping':
             irc_helpers.message(irc, target, "PONG!")

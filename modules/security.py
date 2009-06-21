@@ -1,4 +1,4 @@
-import logging
+from fnmatch import fnmatch
 from irc import User
 
 def init():
@@ -24,4 +24,21 @@ def get_user_access(user):
     results = m('datastore').query("SELECT id, level FROM users WHERE nick = ?", nick)
     if not results:
         return 1
-    return results[0][1] # Check hosts later.
+    
+    level = results[0][1]
+    uid = results[0][0]
+    hosts = m('datastore').query("SELECT host FROM hosts WHERE uid = ? AND (expires < DATETIME() OR expires IS NULL)", uid)
+    for host in hosts:
+        if fnmatch(user.hostname, host[0]):
+            return level
+    
+    return 1
+    
+def get_command_access(command):
+    results = m('datastore').query("SELECT level FROM command_access WHERE command = ?", command)
+    if not results:
+        return 1
+    return results[0][0]
+    
+def check_action_permissible(user, command):
+    return get_user_access(user) >= get_command_access(command)
