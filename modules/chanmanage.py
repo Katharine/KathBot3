@@ -48,5 +48,5 @@ def join(irc, origin, args):
     if automode.get(irc.network.name) and automode[irc.network.name.lower()].get(channel):
         modes = automode[irc.network.name][channel]
         logger.info("Setting +%s on %s in %s" % (modes, origin.nick, channel))
-        command = "MODE %s +%s %s" % (channel, modes, " ".join(["%s" % origin.nick for x in range(0, len(modes))]))
+        command = "MODE %s +%s %s" % (channel, modes, ("%s " % origin.nick) * len(modes))
         irc.raw(command)

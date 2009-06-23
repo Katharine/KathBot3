@@ -24,7 +24,7 @@ class sqlite(threading.Thread):
                     result.put(cursor.fetchall())
                 else:
                     connection.commit()
-            except (sqlite3.OperationalError, sqlite3.InterfaceError), message:
+            except (sqlite3.OperationalError, sqlite3.InterfaceError, sqlite3.IntegrityError), message:
                 if result:
                     result.put([])
                 logger.error("SQL error: %s" % message)
