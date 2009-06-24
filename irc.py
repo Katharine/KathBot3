@@ -16,7 +16,7 @@ class IRC(threading.Thread):
         if not isinstance(network, Network):
             raise TypeError
         self.network = network
-        threading.Thread.__init__(self)
+        threading.Thread.__init__(self, name=network.name)
         
     def run(self):
         logging.info("Connecting to %s:%s..." % (self.network.server, self.network.port))
@@ -38,7 +38,7 @@ class IRC(threading.Thread):
             raise ConnectionNotReady
         logging.debug("->%s\t%s" % (self.network, message))
         self.writelock.acquire()
-        self.socket.send("%s\n" % message)
+        self.socket.send(("%s\n" % message).encode('utf-8'))
         self.writelock.release()
         
     def disconnected(self):

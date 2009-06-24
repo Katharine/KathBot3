@@ -1,4 +1,6 @@
+# encoding=utf-8
 import modules
+import threading
 
 def init():
     add_hook('ping', ping)
@@ -60,6 +62,9 @@ def privmsg(irc, origin, args):
         elif command == 'raw':
             irc.raw(' '.join(args))
             irc_helpers.message(irc, target, "Sent message.")
+        elif command == 'threads':
+            threads = u' · '.join(sorted(['~B%s~B: %s' % (x.__class__.__name__, x.getName()) for x in threading.enumerate()]))
+            irc_helpers.message(irc, target, '~B[THREADING]~B %s' % threads)
         elif command == 'terminate':
             quit()
 
