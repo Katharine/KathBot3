@@ -68,10 +68,32 @@ class FeedPoll(threading.Thread):
         return html
 
 def init():
+    add_hook('privmsg', privmsg)
+    
     global poller
     poller = FeedPoll()
     poller.start()
-    
+
+def privmsg(irc, origin, args):
+    irc_helpers = m('irc_helpers')
+    target, command, args = irc_helpers.parse(args)
+    if command == 'subscribe':
+        if len(args) != 1:
+            irc_helpers.message(irc, target, "You must specify a URL to subscribe to.")
+            return
+        url = args[0]
+        feed = feedparser.parse(url)
+        if feed.status < 200 or feed.status >= 300:
+            irc_helpers.message(irc, target, "No feed found at %s" % url)
+            return
+        
+        if len(feed.entries) == 0:
+            irc_helpers.message(irc, target, "The specified feed is empty.")
+        
+        m('datastore').execute("INSERT INTO rss_subscriptions(network, channel, url) VALUES (?, ?, ?)", irc.network.name, target.lower(), url)
+        
+        irc_helpers.message(irc, target, "Subscribed %s to %s" % (target, feed.feed.title))
+
 def shutdown():
     global poller
     poller.running = False
