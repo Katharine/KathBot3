@@ -10,4 +10,12 @@ networks = {
         primary_channel='#kathbot3',
         name='ajaxlife'
     ),
+    'darknet': Network(
+        server='irc.chilkotardis.com',
+        nicks=('KathBot3',),
+        realname="Kitty's bot",
+        ident="kathbot3",
+        primary_channel="#kathbot3",
+        name="darknet"
+    ),
 }

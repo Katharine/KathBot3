@@ -6,5 +6,7 @@ modules = (
     'security',
     'chantrack',
     'chanmanage',
-    'irclogger'
+    'zmachine',
+    'rss',
+    #'irclogger'
 )

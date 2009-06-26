@@ -1,6 +1,7 @@
 # encoding=utf-8
 import modules
 import threading
+import networks
 
 def init():
     add_hook('ping', ping)
@@ -66,7 +67,15 @@ def privmsg(irc, origin, args):
             threads = u' · '.join(sorted(['~B%s~B: %s' % (x.__class__.__name__, x.getName()) for x in threading.enumerate()]))
             irc_helpers.message(irc, target, '~B[THREADING]~B %s' % threads)
         elif command == 'terminate':
-            quit()
+            reason = ''
+            if len(args) > 0:
+                reason = ' '.join(args)
+            module_list = modules.mods.keys()
+            for module in module_list:
+                modules.unload_module(module)
+            
+            for network in networks.networks:
+                networks.networks[network].disconnect(reason=reason)         
 
 # Other useful "core"-like methods.
 
