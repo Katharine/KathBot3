@@ -193,9 +193,9 @@ class ZMachine(threading.Thread):
         return top | bottom
     
     def signed_number(self, address):
-        return self.sign_unsigned_number(self.unsigned_number(address))
+        return self.sign(self.unsigned_number(address))
         
-    def sign_unsigned_number(self, unsigned, bits=16):
+    def sign(self, unsigned, bits=16):
         if unsigned & (1 << (bits - 1)):
             return unsigned - (1 << bits)
         return unsigned
@@ -658,7 +658,7 @@ class ZMachine(threading.Thread):
             self.pc += 1
             target |= self.memory[self.pc]
         
-        target = self.sign_unsigned_number(target, bits=14)
+        target = self.sign(target, bits=14)
         
         if result == required_result:
             if target == 0:
@@ -790,7 +790,7 @@ class ZMachine(threading.Thread):
         self.op_0op_b() # new_line
         self.op_0op_0() # rtrue
     
-    # nop
+    # nop
     def op_0op_4(self):
         pass # Useful, isn't it?
     
@@ -834,7 +834,7 @@ class ZMachine(threading.Thread):
     def op_0op_9(self):
         self.stack.pop()
     
-    #quit
+    # quit
     def op_0op_a(self):
         self.memory = None
         self.stack = None
@@ -885,7 +885,7 @@ class ZMachine(threading.Thread):
         else:
             self.store(self.memory[address - 1] // 32 + 1)
     
-    # inc
+    # inc
     def op_1op_5(self, variable):
         value = self.get_variable(variable)
         value += 1
@@ -934,7 +934,7 @@ class ZMachine(threading.Thread):
     
     # jump
     def op_1op_c(self, label):
-        label = self.sign_unsigned_number(label)
+        label = self.sign(label)
         self.pc += label - 2
     
     # print_paddr
@@ -958,11 +958,11 @@ class ZMachine(threading.Thread):
     
     # jl
     def op_2op_2(self, a, b):
-        self.branch(a < b)
+        self.branch(self.sign(a) < self.sign(b))
     
     # jg
     def op_2op_3(self, a, b):
-        self.branch(a > b)
+        self.branch(self.sign(a) > self.sign(b))
     
     # dec_chk
     def op_2op_4(self, variable, value):
@@ -970,8 +970,8 @@ class ZMachine(threading.Thread):
         var_value -= 1
         var_value &= 0xFFFF
         self.set_variable(variable, var_value)
-        var_value = self.sign_unsigned_number(var_value)
-        value = self.sign_unsigned_number(value)
+        var_value = self.sign(var_value)
+        value = self.sign(value)
         self.branch(var_value < value)
     
     # inc_chk
@@ -980,8 +980,8 @@ class ZMachine(threading.Thread):
         var_value += 1
         var_value &= 0xFFFF
         self.set_variable(variable, var_value)
-        var_value = self.sign_unsigned_number(var_value)
-        value = self.sign_unsigned_number(value)
+        var_value = self.sign(var_value)
+        value = self.sign(value)
         self.branch(var_value > value)
     
     # jin
@@ -1054,7 +1054,7 @@ class ZMachine(threading.Thread):
         if address == 0:
             address = self.get_default_property_address(prop)
         else:
-            size = self.memory[address - 1] // 32 + 1
+            size = (self.memory[address - 1] // 32) + 1
         if size == 1:
             self.store(self.memory[address])
         elif size == 2:
@@ -1082,37 +1082,37 @@ class ZMachine(threading.Thread):
     
     # add
     def op_2op_14(self, a, b):
-        a = self.sign_unsigned_number(a)
-        b = self.sign_unsigned_number(b)
+        a = self.sign(a)
+        b = self.sign(b)
         self.store(a + b)
     
     # sub
     def op_2op_15(self, a, b):
-        a = self.sign_unsigned_number(a)
-        b = self.sign_unsigned_number(b)
+        a = self.sign(a)
+        b = self.sign(b)
         self.store(a - b)
     
     # mul
     def op_2op_16(self, a, b):
-        a = self.sign_unsigned_number(a)
-        b = self.sign_unsigned_number(b)
+        a = self.sign(a)
+        b = self.sign(b)
         self.store(a * b)
     
     # div
     def op_2op_17(self, a, b):
-        a = self.sign_unsigned_number(a)
-        b = self.sign_unsigned_number(b)
+        a = self.sign(a)
+        b = self.sign(b)
         if b == 0:
             raise StoryError, "Division by zero!"
         self.store(a // b) # Integer division
     
     # div
     def op_2op_18(self, a, b):
-        a = self.sign_unsigned_number(a)
-        b = self.sign_unsigned_number(b)
+        a = self.sign(a)
+        b = self.sign(b)
         if b == 0:
             raise StoryError, "Modulo by zero!"
-        self.store(a % b) # Integer division
+        self.store(a % b)
     
     # je (with three arguments)
     def op_3op_1(self, a, b, c):
