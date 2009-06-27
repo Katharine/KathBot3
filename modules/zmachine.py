@@ -4,8 +4,10 @@ import threading
 import random
 import textwrap
 import struct
-import traceback
-import StringIO
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 from array import array
 
 class StoryError(Exception): pass
@@ -139,7 +141,7 @@ class ZMachine(threading.Thread):
         
         self.pc = self.unsigned_number(0x06)
         
-        self.stack = array('I')
+        self.stack = array('H')
         self.call_stack = array('I')
         
         self.opcodes_executed = 0
@@ -618,32 +620,24 @@ class ZMachine(threading.Thread):
             for wrapped_line in wrapped_lines:
                 m('irc_helpers').message(self.irc, self.channel, '~B[Z]~B %s' % wrapped_line)
     
-    # This format should be compatible with the PHP version...
     def save_game(self, filename):
         f = open("data/zmachine/saves/%s.sav" % filename.replace('/','_'), 'wb')
-        f.write(struct.pack('H', self.pc))
-        self.memory.tofile(f)
-        f.write(struct.pack('B', len(self.stack)))
-        self.stack.tofile(f)
-        f.write(struct.pack('B', len(self.call_stack)))
-        self.call_stack.tofile(f)
+        pickle.dump((self.pc, self.memory[1:self.memory_dynamic_end + 1], self.stack, self.call_stack), f, pickle.HIGHEST_PROTOCOL)
         f.close()
         return True
     
+    # This format is fundamentally the same as the PHP version, except we prefix the
+    # save file with 0xDEADBEEF and a version number, and the callstack is now 16-bit.
+    # If 0xDEAFBEEF is not the first 32-bit word in the file, we assume version 0
+    # and load the callstack as eight-bit values instead of 16-bit values, then
+    # convert them.
     def load_game(self, filename):
         try:
             f = open("data/zmachine/saves/%s.sav" % filename.replace('/','_'), 'rb')
         except IOError, message:
             logger.warn("Error loading file: %s" % message)
             return False
-        self.pc = struct.unpack('H', f.read(2))[0]
-        dynamic = array('B')
-        dynamic.fromfile(f, self.memory_dynamic_end)
-        self.memory[1:self.memory_dynamic_end + 1] = dynamic
-        stack_size = struct.unpack('B', f.read(1))[0]
-        self.stack.fromfile(f, stack_size)
-        call_stack_size = struct.unpack('B', f.read(1))[0]
-        self.call_stack.fromfile(f, call_stack_size)
+        self.pc, self.memory[1:self.memory_dynamic_end + 1], self.stack, self.call_stack = pickle.load(f)
         f.close()
         return True
     
