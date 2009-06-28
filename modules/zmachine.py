@@ -4,13 +4,18 @@ import threading
 import random
 import textwrap
 import struct
+import traceback
+import datetime
+import StringIO
 try:
     import cPickle as pickle
 except ImportError:
     import pickle
+from chunk import Chunk
 from array import array
 
 class StoryError(Exception): pass
+class QuetzalError(Exception): pass
 
 OPCODE_FORMAT_SHORT = 1
 OPCODE_FORMAT_LONG = 2
@@ -22,6 +27,8 @@ OPERAND_TYPE_VAR = 2
 OPERAND_TYPE_OMITTED = 3
 
 STORY_MAX_SIZE = 131072
+
+COMPRESS_SAVE_FILES = True
 
 EXTRA_CHARACTERS = (
     'ä', 'ö', 'ü',
@@ -108,6 +115,13 @@ class ZMachine(threading.Thread):
         threading.Thread.__init__(self, name="%s/%s/%s" % (irc.network.name, channel, story))
         
     def run(self):
+        self.load_story()
+        self.complete_vm_setup()
+        if not self.running:
+            self.running = True
+            self.main_loop()
+    
+    def load_story(self):
         f = open(self.story, 'rb')
         self.memory = array('B') # Unsigned
         try:
@@ -115,11 +129,6 @@ class ZMachine(threading.Thread):
         except EOFError:
             pass
         f.close()
-       
-        self.complete_vm_setup()
-        if not self.running:
-            self.running = True
-            self.main_loop()
     
     def complete_vm_setup(self):        
         self.version = self.memory[0x00]
@@ -228,7 +237,6 @@ class ZMachine(threading.Thread):
         alphabet = 0
         last_alphabet = 0
         temporary = False
-        logger.debug("Converting zchar string %s to zscii..." % zstring)
         i = 0
         while i < len(zstring):
             if i >= len(zstring):
@@ -369,13 +377,11 @@ class ZMachine(threading.Thread):
         if len(next_word) > 0:
             words.append((last_new_word, next_word))
         self.memory[table_address + 1] = len(words)
-        logger.debug("Parsed words: %s" % words)
         for i in range(0, len(words)):
             if i >= self.memory[table_address]:
                 break
             word_data = words[i]
             word = word_data[1]
-            logger.debug("Word %s -- start: %s, word: %s" % (i, word_data[0], word_data[1]))
             zstring = self.zscii_to_zchar(word, 4)
             pos = self.locate_string_in_dictionary(zstring)
             self.set_number(table_address + i*4 + 2, pos)
@@ -610,7 +616,6 @@ class ZMachine(threading.Thread):
     
     def display_string(self, ascii):
         self.output_buffer += ascii
-        logger.debug(self.output_buffer)
         lines = self.output_buffer.split("\n")
         self.output_buffer = lines.pop()
         for line in lines:
@@ -621,30 +626,22 @@ class ZMachine(threading.Thread):
                 m('irc_helpers').message(self.irc, self.channel, '~B[Z]~B %s' % wrapped_line)
     
     def save_game(self, filename):
-        f = open("data/zmachine/saves/%s.sav" % filename.replace('/','_'), 'wb')
-        pickle.dump((self.pc, self.memory[1:self.memory_dynamic_end + 1], self.stack, self.call_stack), f, pickle.HIGHEST_PROTOCOL)
-        f.close()
+        logger.debug("Stack: %s" % self.stack)
+        logger.debug("Callstack: %s" % self.call_stack)
+        QuetzalSaver("data/zmachine/saves/%s.sav" % filename.replace('/','_'), self)
         return True
     
-    # This format is fundamentally the same as the PHP version, except we prefix the
-    # save file with 0xDEADBEEF and a version number, and the callstack is now 16-bit.
-    # If 0xDEAFBEEF is not the first 32-bit word in the file, we assume version 0
-    # and load the callstack as eight-bit values instead of 16-bit values, then
-    # convert them.
     def load_game(self, filename):
         try:
-            f = open("data/zmachine/saves/%s.sav" % filename.replace('/','_'), 'rb')
-        except IOError, message:
-            logger.warn("Error loading file: %s" % message)
+            QuetzalLoader("data/zmachine/saves/%s.sav" % filename.replace('/','_'), self)
+        except (IOError, QuetzalError), message:
+            self.display_string("~BError loading file: %s~B\n" % message)
             return False
-        self.pc, self.memory[1:self.memory_dynamic_end + 1], self.stack, self.call_stack = pickle.load(f)
-        f.close()
         return True
     
     def store(self, value):
         self.pc += 1
         variable = self.memory[self.pc]
-        logger.debug("Storing %s in variable %s" % (value, variable))
         self.set_variable(variable, value)
     
     def branch(self, result):
@@ -682,6 +679,7 @@ class ZMachine(threading.Thread):
         if varcount > 15:
             raise StoryError, "Calling address %s without a routine!" % varcount
         self.pc += 1
+        self.call_stack.append(((0x7F >> len(args)) << 8) | varcount) # Values needed for Quetzal saves.
         self.call_stack.append(self.memory[self.pc])
         self.call_stack.append(self.pc)
         self.call_stack.append(len(self.stack))
@@ -801,9 +799,7 @@ class ZMachine(threading.Thread):
         self.awaiting_input = True
         self.input_wait.wait()
         if not (self.input_text is None):
-            self.pc -= 1 # To counter the increment after the game loads again
             success = self.save_game(self.input_text)
-            self.pc += 1
             self.branch(success)
     
     # restore
@@ -813,9 +809,7 @@ class ZMachine(threading.Thread):
         self.awaiting_input = True
         self.input_wait.wait()
         if not (self.input_text is None):
-            self.pc -= 1
             success = self.load_game(self.input_text)
-            self.pc += 1
             self.branch(success)
     
     # restart
@@ -928,6 +922,7 @@ class ZMachine(threading.Thread):
         stack_top = self.call_stack.pop()
         pc = self.call_stack.pop()
         var = self.call_stack.pop()
+        self.call_stack.pop() # Useless byte.
         self.stack = self.stack[0:stack_top]
         self.set_variable(var, ret)
         self.pc = pc
@@ -1121,7 +1116,250 @@ class ZMachine(threading.Thread):
     # je (with four arguments)
     def op_4op_1(self, a, b, c, d):
         self.branch(a == b or a == c or a == d)
+
+class QuetzalSaver(object):
+    machine = None
+    original_image = None
+    
+    def __init__(self, save_file, machine):
+        self.machine = machine
+        o = open(self.machine.story, 'rb')
+        self.original_image = array('B')
+        try:
+            self.original_image.fromfile(o, self.machine.memory_dynamic_end)
+        except EOFError:
+            pass
+        o.close()
+        self.write_save(save_file)
+    
+    def write_save(self, filename):
+        f = open(filename, 'wb')
+        s = StringIO.StringIO()
+        self.write_IFhd(s)
+        if COMPRESS_SAVE_FILES:
+            self.write_CMem(s)
+        else:
+            self.write_UMem(s)
+        self.write_Stks(s)
+        self.write_ANNO(s)
+        self.write_AUTH(s)
+        form = s.getvalue()
+        s.close()
+        f.write('FORM%sIFZS%s' % (struct.pack('!I', len(form) + 4), form))
+        f.close()
+    
+    def write_IFhd(self, stream):
+        args = []
+        args.append(13)
+        args.append(self.machine.unsigned_number(0x02))
+        args.extend(self.machine.memory[0x12:0x18])
+        args.append(self.machine.unsigned_number(0x1C))
+        pc = self.machine.pc + 1
+        args.extend(((pc >> 16) & 0xFF, (pc >> 8) & 0xFF, pc & 0xFF))
+        stream.write('IFhd%s' % struct.pack('!IH6BH3B', *args))
+        stream.write('\x00')
+    
+    def write_CMem(self, stream):
+        cmem = array('B')
+        running = False
+        run = 0
+        for i in xrange(0, self.machine.memory_dynamic_end):
+            xor = self.original_image[i] ^ self.machine.memory[i]
+            if xor != 0:
+                if running:
+                    running = False
+                    cmem.append(run)
+                cmem.append(xor)
+            else:
+                if running:
+                    run += 1
+                    if run > 255:
+                        cmem.append(255)
+                        cmem.append(0)
+                        run = 0
+                else:
+                    cmem.append(0)
+                    running = True
+                    run = 0
         
+        if running:
+            cmem.append(run)
+        
+        stream.write('CMem%s%s' % (struct.pack('!I', len(cmem)), cmem.tostring()))
+        if len(cmem) % 2 == 1:
+            stream.write('\x00')
+    
+    def write_UMem(self, stream):
+        umem = self.machine.memory[0:self.machine.memory_dynamic_end]
+        stream.write('UMem%s%s' % (struct.pack('!I', len(umem)), umem.tostring()))
+        if len(umem) % 2 == 1:
+            stream.write('\x00')
+    
+    def write_Stks(self, stream):
+        callstack_pointer = 0
+        stack_pointer = 0
+        chunk_length = 0
+        frame_stream = StringIO.StringIO()
+        
+        # Dummy first frame
+        args = [0,0,0,0,0,0]
+        if len(self.machine.call_stack) > 3:
+            eval_count = self.machine.call_stack[3]
+        else:
+            eval_count = 0
+        args.append(eval_count)
+        args.extend(self.machine.stack[0:eval_count])
+        frame_stream.write(struct.pack('!3BBBBH%iH' % eval_count, *args))
+        chunk_length += 8 + eval_count*2
+        
+        while callstack_pointer < len(self.machine.call_stack):
+            args_supplied = self.machine.call_stack[callstack_pointer] >> 8
+            local_count = self.machine.call_stack[callstack_pointer] & 0x0F
+            ret_var = self.machine.call_stack[callstack_pointer + 1]
+            pc = self.machine.call_stack[callstack_pointer + 2]
+            top = self.machine.call_stack[callstack_pointer + 3]
+            callstack_pointer += 4
+            if callstack_pointer + 3 >= len(self.machine.call_stack):
+                eval_count = len(self.machine.stack) - top
+            else:
+                eval_count = self.machine.call_stack[callstack_pointer + 3] - top
+            eval_count -= local_count
+            
+            pc += 1 # Counter for our disagreement with the beginning of pc
+            
+            chunk_length += 8 + local_count*2 + eval_count*2
+            
+            # Write frame
+            args = []
+            args.extend(((pc >> 16) & 0xFF, (pc >> 8) & 0xFF, pc & 0xFF))
+            args.append(local_count) # We can ignore "p" because the call_xN ops don't exist
+            args.append(ret_var)
+            args.append(args_supplied)
+            args.append(eval_count)
+            args.extend(self.machine.stack[top:top+local_count])
+            args.extend(self.machine.stack[top+local_count:top+local_count+eval_count])
+            
+            frame_stream.write(struct.pack('!3BBBBH%iH%iH' % (local_count, eval_count), *args))
+        
+        stream.write("Stks%s%s" % (struct.pack('!I', chunk_length), frame_stream.getvalue()))
+        if chunk_length % 2 == 1:
+            stream.write('\x00')
+        frame_stream.close()
+    
+    def write_ANNO(self, stream):
+        message = "Version %s game, saved by KathBot3 @%s" % (self.machine.version, datetime.datetime.now())
+        stream.write("ANNO%s%s" % (struct.pack('!I', len(message)), message))
+        
+        if len(message) % 2 == 1:
+            stream.write('\x00')
+    
+    def write_AUTH(self, stream):
+        message = "The members of %s on %s" % (self.machine.channel, self.machine.irc.network.server)
+        stream.write("AUTH%s%s" % (struct.pack('!I', len(message)), message))
+        
+        if len(message) % 2 == 1:
+            stream.write('\x00')
+
+class QuetzalLoader(object):
+    machine = None
+    
+    def __init__(self, save_file, machine):
+        f = open(save_file, 'rb')
+        form = Chunk(f)
+        self.machine = machine
+        if form.read(4) != 'IFZS':
+            raise QuetzalError, "File is not a quetzal save file!"
+        
+        # Read the thing
+        while True:
+            try:
+                chunk = Chunk(form)
+            except EOFError:
+                break
+            function = "chunk_%s" % chunk.getname().strip()
+            if hasattr(self, function):
+                self.__getattribute__(function)(chunk)
+    
+    def chunk_IFhd(self, chunk):
+        ifhd = struct.unpack('!H6BH3B', chunk.read())
+        release = ifhd[0]
+        serial = array('B', ifhd[1:7])
+        checksum = ifhd[7]
+        pc = (ifhd[8] << 16) | (ifhd[9] << 8) | ifhd[10]
+        if self.machine.unsigned_number(0x02) != release or \
+            self.machine.memory[0x12:0x18] != serial or \
+            checksum != self.machine.unsigned_number(0x1C):
+            raise QuetzalError, "Wrong game!"
+        
+        self.machine.load_story()
+        self.machine.pc = pc - 1
+    
+    def chunk_CMem(self, chunk):
+        cmem = array('B', chunk.read())
+        pointer = 0
+        skipping = False
+        for byte in cmem:
+            if byte != 0 and not skipping:
+                self.machine.memory[pointer] ^= byte
+                pointer += 1
+            elif not skipping:
+                skipping = True
+                pointer += 1
+            else:
+                skipping = False
+                pointer += byte
+        
+        if skipping:
+            raise QuetzalError, "Bad save data!"
+        if pointer > self.machine.memory_dynamic_end:
+            raise QuetzalError, "Save data overruns dynamic memory area"
+    
+    def chunk_UMem(self, chunk):
+        umem = array('B', chunk.read())
+        if len(umem) != self.machine.memory_dynamic_end:
+            raise QuetzalError, "Uncompressed memory image is the wrong size!"
+        self.machine.memory[0:self.machine.memory_dynamic_end] = umem
+    
+    def chunk_Stks(self, chunk):
+        self.machine.stack = array('H')
+        self.machine.call_stack = array('I')
+        while True:
+            pc = chunk.read(3)
+            if pc == '':
+                break
+            if len(pc) != 3:
+                raise QuetzalError, "Something bad happened!"
+            pc = struct.unpack('!3B', pc)
+            pc = (pc[0] << 16) | (pc[1] << 8) | pc[2]
+            flags = struct.unpack('!B', chunk.read(1))[0]
+            discard_result = flags & 0x10
+            local_count = flags & 0x0F
+            ret_var = struct.unpack('!B', chunk.read(1))[0]
+            args_supplied = struct.unpack('!B', chunk.read(1))[0]
+            stack_size = struct.unpack('!H', chunk.read(2))[0]
+            local = struct.unpack('!%iH' % local_count, chunk.read(local_count * 2))
+            stack = struct.unpack('!%iH' % stack_size, chunk.read(stack_size * 2))
+            
+            # Actually put the data on.
+            if pc > 0:
+                self.machine.call_stack.append((args_supplied << 8) | local_count)
+                self.machine.call_stack.append(ret_var)
+                self.machine.call_stack.append(pc - 1)
+                self.machine.call_stack.append(len(self.machine.stack))
+            for var in local:
+                self.machine.stack.append(var)
+            for word in stack:
+                self.machine.stack.append(word)
+        logger.debug("Loaded: stack: %s" % self.machine.stack)
+        logger.debug("Loaded: callstack: %s" % self.machine.call_stack)
+    
+    def chunk_ANNO(self, chunk):
+        message = chunk.read()
+        self.machine.display_string("~BSave file information~B: %s\n" % message)
+    
+    def chunk_AUTH(self, chunk):
+        message = chunk.read()
+        self.machine.display_string("~BSave file creator~B: %s\n" % message)
 
 z_machines = {}
 
