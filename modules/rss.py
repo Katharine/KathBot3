@@ -23,7 +23,7 @@ class FeedPoll(threading.Thread):
                     continue
                 
                 try:
-                    feed = feedparser.parse(url, etag=etag, modified=last_modified)
+                    feed = feedparser.parse(url, etag=etag)
                     if feed.get('status', 200) == 304 or len(feed.entries) == 0:
                         logger.debug("Received HTTP 304 from %s" % url)
                         continue

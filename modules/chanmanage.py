@@ -37,6 +37,7 @@ def privmsg(irc, origin, args):
             key = args[1]
         irc_helpers.join(irc, channel, key)
         m('datastore').execute("INSERT INTO channels(channel, network, passkey) VALUES(?, ?, ?)", channel.lower(), irc.network.name, key)
+        irc_helpers.message(irc, target, "Joined %s." % channel)
 
 def connected(irc):
     channels = m('datastore').query("SELECT channel, passkey FROM channels WHERE network = ?", irc.network.name)

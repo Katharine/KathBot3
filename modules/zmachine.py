@@ -579,7 +579,8 @@ class ZMachine(threading.Thread):
     
     def get_object_parent(self, obj):
         if obj == 0:
-            raise StoryError, "Attempted to read the parent of null object"
+            #raise StoryError, "Attempted to read the parent of null object"
+            return 0
         address = self.get_object_address(obj)
         return self.memory[address + 4]
     
@@ -922,7 +923,7 @@ class ZMachine(threading.Thread):
         stack_top = self.call_stack.pop()
         pc = self.call_stack.pop()
         var = self.call_stack.pop()
-        self.call_stack.pop() # Useless byte.
+        self.call_stack.pop() # Useless bytes.
         self.stack = self.stack[0:stack_top]
         self.set_variable(var, ret)
         self.pc = pc
