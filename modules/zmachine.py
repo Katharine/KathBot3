@@ -7,10 +7,6 @@ import struct
 import traceback
 import datetime
 import StringIO
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
 from chunk import Chunk
 from array import array
 
@@ -80,7 +76,7 @@ class ZMachine(threading.Thread):
     irc = None
     channel = None
     output_buffer = ''
-    text_style = 
+    text_style = TEXT_STYLE_ROMAN
     
     # Thread management
     awaiting_input = False
@@ -534,7 +530,7 @@ class ZMachine(threading.Thread):
         function_name = 'op_'
         if format == OPCODE_FORMAT_VARIABLE and really_variable:
             function_name += 'var'
-        elif foramt == OPCODE_FORMAT_EXTENDED:
+        elif format == OPCODE_FORMAT_EXTENDED:
             function_name += 'ext'
         else:
             function_name += "%sop" % operand_count
@@ -550,6 +546,7 @@ class ZMachine(threading.Thread):
                 self.__getattribute__(function_name)(*operands)
             except StoryError, message:
                 self.report_error("Story error: %s" % message)
+                self.report_error(traceback.format_exc())
             except Exception, message:
                 self.report_error("Internal error: %s" % message)
                 self.report_error(traceback.format_exc())
@@ -668,7 +665,7 @@ class ZMachine(threading.Thread):
     def get_default_property_address(self, prop):
         return self.object_table_start + (prop - 1) * 2
     
-    def get_property_size(self, obj=0, prop=0, address=0):
+    def get_object_property_size(self, obj=0, prop=0, address=0):
         if not address:
             address = self.get_object_property_address(obj, prop)
         address -= 1
@@ -682,6 +679,15 @@ class ZMachine(threading.Thread):
                 return size
             else:
                 return 1
+    
+    def get_object_property_number(self, address):
+        if self.version < 4:
+            return self.memory[address - 1] % 32
+        else:
+            address -= 1
+            if self.memory[address] & 0x80:
+                address -= 1
+            return self.memory[address] & 0x3F
     
     def get_object_parent(self, obj=0, address=0):
         if obj == 0 and address == 0:
@@ -714,10 +720,28 @@ class ZMachine(threading.Thread):
             return self.unsigned_number(address + 10)
     
     def set_object_parent(self, obj=0, new_parent=0, address=0):
-        if 
-        address = self.get_object_address(obj)
+        if address == 0:
+            address = self.get_object_address(obj)
         if self.version < 4:
-            self.memory[obj_address + 4] = new_parent
+            self.memory[address + 4] = new_parent
+        else:
+            self.set_number(address + 6, new_parent)
+    
+    def set_object_sibling(self, obj=0, new_sibling=0, address=0):
+        if address == 0:
+            address = self.get_object_address(obj)
+        if self.version < 4:
+            self.memory[address + 5] = new_sibling
+        else:
+            self.set_number(address + 8, new_sibling)
+    
+    def set_object_child(self, obj=0, new_child=0, address=0):
+        if address == 0:
+            address = self.get_object_address(obj)
+        if self.version < 4:
+            self.memory[address + 6] = new_child
+        else:
+            self.set_number(address + 10, new_child)
     
     def get_object_previous_sibling(self, obj):
         object_parent = self.get_object_parent(obj)
@@ -845,7 +869,7 @@ class ZMachine(threading.Thread):
     # put_prop
     def op_var_3(self, obj, prop, value):
         address = self.get_object_property_address(obj, prop)
-        size = self.get_property_size(obj, prop)
+        size = self.get_object_property_size(obj, prop)
         if size == 1:
             self.memory[address] = value
         elif size == 2:
@@ -1049,7 +1073,7 @@ class ZMachine(threading.Thread):
         if address == 0:
             self.store(0)
         else:
-            self.store(self.get_property_size(address=address))
+            self.store(self.get_object_property_size(address=address))
     
     # inc
     def op_1op_5(self, variable):
@@ -1073,20 +1097,15 @@ class ZMachine(threading.Thread):
     # remove_obj
     def op_1op_9(self, obj):
         address = self.get_object_address(obj)
-        previous_sibling = self.get_object_previous_sibling(obj)
+        previous_sibling = self.get_object_previous_sibling(address=address)
         if previous_sibling == 0:
-            parent = self.get_object_parent(obj)
+            parent = self.get_object_parent(address=address)
             if parent > 0:
-                parent_address = self.get_object_address(parent)
-                if self.version < 4:
-                    self.memory[parent_address + 6] = self.get_object_sibling(obj)
-                else:
-                    self.set_number(parent_address + 10, self.get_object_sibling(obj))
+                self.set_object_child(parent, self.get_object_sibling(address=address))
         else:
-            previous_address = self.get_object_address(previous_sibling)
-            self.memory[previous_address + 5] = self.memory[address + 5]
-        self.memory[address + 5] = 0
-        self.memory[address + 4] = 0
+            self.set_object_sibling(previous_sibling, self.get_object_sibling(address=address))
+        self.set_object_parent(new_parent=0, address=address)
+        self.set_object_sibling(new_sibling=0, address=address)
     
     # print_obj
     def op_1op_a(self, obj):
@@ -1188,26 +1207,23 @@ class ZMachine(threading.Thread):
     
     # insert_obj
     def op_2op_e(self, obj, destination):
-        obj_addr = self.get_object_address(obj)
-        dest_addr = self.get_object_address(destination)
-        
         # The net aim of all of this is to move the object from one place to another.
         # This first part rebuilds the tree around its current position, jumping over it.
         previous_sibling = self.get_object_previous_sibling(obj)
         if previous_sibling == 0:
             # Set the child of the parent of the object to the sibling of the object
-            self.memory[self.get_object_address(self.get_object_parent(obj)) + 6] = self.memory[obj_addr + 5]
+            self.set_object_child(self.get_object_parent(obj), self.get_object_sibling(obj))
         else:
             # Set the object that this object was a sibling of's sibling to the sibling of this object.
-            self.memory[self.get_object_address(previous_sibling) + 5] = self.memory[obj_addr + 5]
+            self.set_object_sibling(previous_sibling, self.get_object_sibling(obj))
         
         # This second part rebuilds the tree around its new position, including it
         # Set the sibling of the object to the child of the destination
-        self.memory[obj_addr + 5] = self.memory[dest_addr + 6]
+        self.set_object_sibling(obj, self.get_object_child(destination))
         # Set the child of the destination to the object
-        self.memory[dest_addr + 6] = obj
+        self.set_object_child(destination, obj)
         # Set the parent of the object to the destination
-        self.memory[obj_addr + 4] = destination
+        self.set_object_parent(obj, destination)
     
     # loadw
     def op_2op_f(self, array, word_index):
@@ -1224,7 +1240,7 @@ class ZMachine(threading.Thread):
         if address == 0:
             address = self.get_default_property_address(prop)
         else:
-            size = (self.memory[address - 1] // 32) + 1
+            size = self.get_object_property_size(obj, prop)
         if size == 1:
             self.store(self.memory[address])
         elif size == 2:
@@ -1235,20 +1251,27 @@ class ZMachine(threading.Thread):
         self.store(self.get_object_property_address(obj, prop))
     
     # get_next_prop
+    # This may well be wrong.
     def op_2op_13(self, obj, prop):
         if prop == 0:
             address = self.get_object_property_table_address(obj)
             address += self.memory[address] * 2 + 1
+            if self.version < 4:
+                address += 1
+            else:
+                if self.memory[address] & 0x80:
+                    address += 2
+                else:
+                    address += 1
         else:
             address = self.get_object_property_address(obj, prop)
-            address += self.memory[address - 1] // 32 + 1
-        next_size_byte = self.memory[address]
+            address += self.get_object_property_size(address=address)
         if address == 0:
             raise StoryError, "Illegal get_next_prop on nonexistent object property"
         if next_size_byte == 0:
             self.store(0)
         else:
-            self.store(next_size_byte % 32)
+            self.store(self.get_object_property_number(address))
     
     # add
     def op_2op_14(self, a, b):
