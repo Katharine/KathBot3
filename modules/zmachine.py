@@ -23,7 +23,7 @@ OPERAND_TYPE_LARGE = 0
 OPERAND_TYPE_VAR = 2
 OPERAND_TYPE_OMITTED = 3
 
-STORY_MAX_SIZE = 131072
+STORY_MAX_SIZE = 262144
 
 COMPRESS_SAVE_FILES = True
 
@@ -532,12 +532,16 @@ class ZMachine(threading.Thread):
             figure_types(self.memory[self.pc])
             
             # Because call_vn2 and call_vs2 are annoying special cases.
-            if format == OPCODE_FORMAT_VARIABLE:
+            if format == OPCODE_FORMAT_VARIABLE and really_variable:
                 if opcode == 0xC or opcode == 0x1A:
                     self.pc += 1
                     figure_types(self.memory[self.pc])
+                    if not really_variable:
+                        operand_types = operand_types[0:2]
             
             operand_count = len(operand_types)
+            if format == OPCODE_FORMAT_VARIABLE and not really_variable:
+                operand_count = 2
         
         operands = []
         for operand_type in operand_types:
@@ -564,6 +568,7 @@ class ZMachine(threading.Thread):
                     operands[i] = self.get_variable(operands[i])
             
             try:
+                logger.debug("Calling %s%s" % (function_name, operands))
                 self.__getattribute__(function_name)(*operands)
             except StoryError, message:
                 self.report_error("Story error: %s" % message)
@@ -861,7 +866,7 @@ class ZMachine(threading.Thread):
             return
         varcount = self.memory[routine]
         if varcount > 15:
-            raise StoryError, "Calling address %s without a routine!" % varcount
+            raise StoryError, "Calling address %s without a routine!" % routine
         self.pc += 1
         self.call_stack.append(((0x7F >> (7 - len(args))) << 8) | varcount) # Values needed for Quetzal saves and check_arg_count (v5)
         self.call_stack.append(ret)
@@ -871,9 +876,14 @@ class ZMachine(threading.Thread):
             if args:
                 self.stack.append(args.pop(0)) # Push argument onto the stack
             else:
-                self.stack.append(self.unsigned_number(routine + i*2 +1)) # Push default value onto the stack
+                if self.version < 5:
+                    self.stack.append(self.unsigned_number(routine + i*2 +1)) # Push default value onto the stack
+                else:
+                    self.stack.append(0)
         
-        self.pc = routine + varcount*2
+        self.pc = routine
+        if self.version < 5:
+            self.pc += varcount * 2
     
     
     # Opcodes. :o
@@ -1070,15 +1080,18 @@ class ZMachine(threading.Thread):
     
     # call_vn
     def op_var_19(self, routine, *args):
-        self.call(routine, -1, *args)
+        self.call(routine, 65535, *args)
     
     # call_vn2
     def op_var_1a(self, routine, *args):
-        self.call(routine, -1, *args)
+        self.call(routine, 65535, *args)
     
     # tokenise
     def op_var_1b(self, text, parse, dictionary=0, flag=0):
-        self.tokenise_zscii(text, parse, dictionary=dictionary, leave_unknowns=bool(flag))
+        length = self.memory[text]
+        zscii = self.memory[text+1:text+length+1]
+        logger.info("Tokenising \"%s\"." % self.zscii_to_ascii(zscii))
+        self.tokenise_zscii(parse, zscii, dictionary=dictionary, leave_unknowns=bool(flag))
     
     # encode_text
     def op_var_1c(self, zscii, length, start, coded):
@@ -1322,15 +1335,15 @@ class ZMachine(threading.Thread):
     # remove_obj
     def op_1op_9(self, obj):
         address = self.get_object_address(obj)
-        previous_sibling = self.get_object_previous_sibling(address=address)
+        previous_sibling = self.get_object_previous_sibling(obj)
         if previous_sibling == 0:
-            parent = self.get_object_parent(address=address)
+            parent = self.get_object_parent(obj)
             if parent > 0:
-                self.set_object_child(parent, self.get_object_sibling(address=address))
+                self.set_object_child(parent, self.get_object_sibling(obj))
         else:
-            self.set_object_sibling(previous_sibling, self.get_object_sibling(address=address))
-        self.set_object_parent(new_parent=0, address=address)
-        self.set_object_sibling(new_sibling=0, address=address)
+            self.set_object_sibling(previous_sibling, self.get_object_sibling(obj))
+        self.set_object_parent(obj, 0)
+        self.set_object_sibling(obj, 0)
     
     # print_obj
     def op_1op_a(self, obj):
@@ -1343,8 +1356,10 @@ class ZMachine(threading.Thread):
         var = self.call_stack.pop()
         self.call_stack.pop() # Useless bytes.
         self.stack = self.stack[0:stack_top]
-        if var != -1:
+        if var != 65535:
             self.set_variable(var, ret)
+        else:
+            pc -= 1
         self.pc = pc
     
     # jump
@@ -1371,11 +1386,11 @@ class ZMachine(threading.Thread):
             self.store((~operand) & 0xFFFF)
         else:
             # call_1n
-            self.call(operand, -1)
+            self.call(operand, 65535)
     
-    # je (with two operands)
-    def op_2op_1(self, a, b):
-        self.branch(a == b)
+    # je
+    def op_2op_1(self, a, b, c=None, d=None):
+        self.branch(a == b or a == c or a == d)
     
     # jl
     def op_2op_2(self, a, b):
@@ -1545,7 +1560,7 @@ class ZMachine(threading.Thread):
     
     # call_2n
     def op_2op_1a(self, routine, arg):
-        self.call(routine, -1, arg)
+        self.call(routine, 65535, arg)
     
     # set_colour
     def op_2op_1b(self, foreground, background):
@@ -1556,14 +1571,6 @@ class ZMachine(threading.Thread):
     def op_2op_1c(self, value, stack_frame):
         self.call_stack = self.call_stack[0:stack_frame]
         self.op_1op_b(value) # ret value
-    
-    # je (with three arguments)
-    def op_3op_1(self, a, b, c):
-        self.branch(a == b or a == c)
-    
-    # je (with four arguments)
-    def op_4op_1(self, a, b, c, d):
-        self.branch(a == b or a == c or a == d)
 
 class QuetzalSaver(object):
     machine = None
