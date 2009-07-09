@@ -13,6 +13,8 @@ def init():
     add_hook('nick', nick)
 
 def writeline(network, channel, line):
+    network = network.replace('/', '_')
+    channel = channel.replace('/', '_')
     if not os.path.exists("data/logs/%s" % network):
         os.mkdir("data/logs/%s" % network)
     f = open("data/logs/%s/%s.log" % (network, channel), 'a')
