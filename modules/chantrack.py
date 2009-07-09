@@ -88,6 +88,17 @@ def nick(irc, origin, args):
                 del channel.users[origin.nick.lower()]
                 logger.info("Renamed %s to %s in %s/%s" % (origin.nick, newnick, irc.network, channel))
 
+# Information access
+
+def nick_channels(irc, nick):
+    channels = []
+    for channel_name in network(irc):
+        channel = network(irc)[channel_name]
+        if nick.lower() in channel.users:
+            channels.append(channel_name)
+    
+    return channels
+
 class Channel:
     users = {}
     topic = ''

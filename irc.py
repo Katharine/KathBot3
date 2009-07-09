@@ -27,7 +27,7 @@ class IRC(threading.Thread):
             logging.error("Couldn't connect: %s" % message)
             return
         logging.info("Connected.")
-        self.raw("USER 8 * %s: %s" % (self.network.ident, self.network.realname))
+        self.raw("USER %s 8 *: %s" % (self.network.ident, self.network.realname))
         self.nick = self.network.nicks[0]
         self.raw("NICK %s" % self.nick)
         self.connected = True
@@ -115,7 +115,7 @@ class Network:
         return self.name
     
 class User:
-    host = ''
+    hostname = ''
     nick = ''
     ident = ''
     
