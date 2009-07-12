@@ -38,7 +38,7 @@ class sqlite(threading.Thread):
     def select(self, query, args=None):
         result = Queue()
         self.execute(query, args, result)
-        return result.get()
+        return result.get(True, 5)
 
     def close(self):
         self.execute('__close__')

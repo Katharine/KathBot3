@@ -1,5 +1,6 @@
 import sys
 import logging
+import traceback
 
 class ModuleAlreadyLoaded(Exception): pass
 class ModuleNotLoaded(ImportError): pass
@@ -24,7 +25,7 @@ def call_hook(hook, *args, **kwds):
                 try:
                     hooks[hook][module](*args, **kwds)
                 except Exception, message:
-                   logging.error("Error calling hook %s on %s: %s" % (hook, module, message))
+                   logging.error("Error calling hook %s on %s: %s" % (hook, module, traceback.format_exc()))
         except RuntimeError, message:
             logging.warn("Aborted hook %s due to looping failure: %s" % (hook, message))
 

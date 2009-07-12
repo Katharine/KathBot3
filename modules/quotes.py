@@ -58,7 +58,7 @@ def privmsg(irc, origin, args):
             for line in lines:
                 irc_helpers.message(irc, target, "~B[Quote]~B %s" % line)
                 
-            irc_helpers.message(irc, target, "~B[Quote]~B Added at %s by %s." % (quote.added.strftime('%I:%M%P on %A, %e %B, %Y').replace('  ',' '), quote.nick))
+            irc_helpers.message(irc, target, "~B[Quote]~B Added %s by %s." % (quote.added.strftime('at %l:%M%P on %A, %e %B, %Y').replace('  ',' '), quote.nick))
 
 class Quote(object):
     nick = ''

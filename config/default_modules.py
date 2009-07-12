@@ -8,5 +8,7 @@ modules = (
     'chanmanage',
     'zmachine',
     'rss',
+    'logger',
+    'dynamic',
     #'irclogger'
 )

@@ -1,9 +1,13 @@
+# coding=utf-8
 def format(msg):
     return msg.replace('~B', chr(2)).replace('~U', chr(31)).replace('~I', chr(22))
 
 def message(irc, target, msg, fmt=True):
+    msg = unicode(msg)
     if fmt:
         msg = format(msg)
+    if msg.startswith("/me"):
+        msg = "\x01ACTION %s\x01" % msg[4:]
     irc.raw("PRIVMSG %s :%s" % (target, msg))
 
 def notice(irc, target, msg, fmt=True):

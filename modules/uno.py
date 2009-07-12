@@ -1,24 +1,14 @@
 import random
 
-UNO_CARDS = (
-    'red 0', 'red 1', 'red 1', 'red 2', 'red 2', 'red 3', 'red 3', 'red 4', 'red 4', 'red 5', 'red 5',
-    'red 6', 'red 6', 'red 7', 'red 7', 'red 8', 'red 8', 'red 9', 'red 9', 'red skip', 'red skip',
-    'red draw 2', 'red draw 2', 'red reverse', 'red reverse',
-
-    'green 0', 'green 1', 'green 1', 'green 2', 'green 2', 'green 3', 'green 3', 'green 4', 'green 4', 'green 5', 'green 5',
-    'green 6', 'green 6', 'green 7', 'green 7', 'green 8', 'green 8', 'green 9', 'green 9', 'green skip', 'green skip',
-    'green draw 2', 'green draw 2', 'green reverse', 'green reverse',
-    
-    'blue 0', 'blue 1', 'blue 1', 'blue 2', 'blue 2', 'blue 3', 'blue 3', 'blue 4', 'blue 4', 'blue 5', 'blue 5',
-    'blue 6', 'blue 6', 'blue 7', 'blue 7', 'blue 8', 'blue 8', 'blue 9', 'blue 9', 'blue skip', 'blue skip',
-    'blue draw 2', 'blue draw 2', 'blue reverse', 'blue reverse',
-    
-    'yellow 0', 'yellow 1', 'yellow 1', 'yellow 2', 'yellow 2', 'yellow 3', 'yellow 3', 'yellow 4', 'yellow 4', 'yellow 5', 'yellow 5',
-    'yellow 6', 'yellow 6', 'yellow 7', 'yellow 7', 'yellow 8', 'yellow 8', 'yellow 9', 'yellow 9', 'yellow skip', 'yellow skip',
-    'yellow draw 2', 'yellow draw 2', 'yellow reverse', 'yellow reverse',
-)    
-
 class UnoError(Exception): pass
+
+class UnoCard(object):
+    colour = ''
+    number = ''
+    
+    def __init__(self, colour='', number=''):
+        self.colour = colour
+        self.number = str(number)
 
 class UnoGame(object):
     discard_pile = []
@@ -30,7 +20,21 @@ class UnoGame(object):
     rotation = 1
     
     def __init__(self):
-        self.draw_pile = list(UNO_CARDS)
+        self.generate_initial_pile()
+    
+    def generate_initial_pile(self):
+        self.draw_pile = []
+        colours = ('red', 'green', 'blue', 'yellow')
+        numbers = (1, 2, 3, 4, 5, 6, 7, 8, 9, 'skip', 'draw 2', 'reverse')
+        for colour in colours:
+            for number in numbers:
+                self.draw_pile.append(UnoCard(colour=colour, number=number))
+                self.draw_pile.append(UnoCard(colour=colour, number=number))
+            self.draw_pile.append(UnoCard(colour=colour, number=0))
+        
+        for i in range(0, 4):
+            self.draw_pile.append(UnoCard(colour='wild'))
+            self.draw_pile.append(UnoCard(colour='wild', number='draw four'))
     
     def discard_top(self):
         if len(self.discard_pile):
@@ -86,6 +90,8 @@ class UnoGame(object):
         self.current_player.drawn = True
         self.current_player.hand.append(drawn)
         self.current_player.permitted = drawn
+        if len(self.draw_pile) == 0:
+            self.move_discard_to_draw_pile()
     
     def shuffle_draw_pile(self):
         random.shuffle(self.draw_pile)
