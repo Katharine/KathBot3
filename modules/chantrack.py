@@ -100,12 +100,13 @@ def nick_channels(irc, nick):
     return channels
 
 class Channel:
-    users = {}
+    users = None
     topic = ''
     joined = None
     name = ''
     
     def __init__(self, name='', topic=''):
+        self.users = {}
         joined = datetime.now()
         self.name = name
         self.topic = topic
