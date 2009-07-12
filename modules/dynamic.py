@@ -1,3 +1,4 @@
+# encoding=utf-8
 # Warning: this is very ugly.
 from __future__ import division
 import random
@@ -7,7 +8,7 @@ import os
 import math
 import textwrap
 
-PARENT_TAGS = ('if', 'else', 'choose', 'choice', 'c', 'set', 'try', 'length', 'indefinite', 'capitalise', 'math', 'repeat', 'while')
+PARENT_TAGS = ('if', 'else', 'choose', 'choice', 'c', 'set', 'try', 'length', 'indefinite', 'capitalise', 'math', 'repeat', 'while', 'get')
 
 class ParseError(Exception): pass
 
@@ -48,6 +49,12 @@ class StringNode(ParseNode):
         self.attribute = string
 
 class TagNode(ParseNode): pass
+
+def stringify(string):
+    if isinstance(string, basestring):
+        return string
+    else:
+        return str(string)
 
 def parse_tree(line):
     parts = []
@@ -98,7 +105,7 @@ def parseline(irc, origin, args, channel, line):
 def treelevel(node, irc, origin, args, channel, variables):
     value = ''
     for child in node.children:
-        value += str(dotree(child, irc, origin, args, channel, variables))
+        value += stringify(dotree(child, irc, origin, args, channel, variables))
     return value
 
 def dotree(node, irc, origin, args, channel, variables=None):
@@ -110,6 +117,7 @@ def dotree(node, irc, origin, args, channel, variables=None):
             'nick': origin.nick,
             'hostname': origin.hostname,
             'args': ' '.join(args),
+            'argcount': len(args),
             '__builtins__': None, # Disable the builtin functions.
         }
         try:
@@ -124,7 +132,7 @@ def dotree(node, irc, origin, args, channel, variables=None):
     if node.name in ('root', 'else', 'choice', 'c'):
         value = ''
         for child in node.children:
-            value += str(dotree(child, irc, origin, args, channel, variables))
+            value += stringify(dotree(child, irc, origin, args, channel, variables))
         return value
     
     
@@ -141,13 +149,13 @@ def dotree(node, irc, origin, args, channel, variables=None):
             value = ''
             for child in node.children:
                 if child.name != 'else':
-                    value += str(dotree(child, irc, origin, args, channel, variables))
+                    value += stringify(dotree(child, irc, origin, args, channel, variables))
             return value
         else:
             value = ''
             for child in node.children:
                 if child.name == 'else':
-                    value += str(dotree(child, irc, origin, args, channel, variables))
+                    value += stringify(dotree(child, irc, origin, args, channel, variables))
             return value
     elif node.name == 'repeat':
         try:
@@ -182,7 +190,7 @@ def dotree(node, irc, origin, args, channel, variables=None):
     elif node.name == 'random':
         r = node.attribute.split(':')
         try:
-            return str(random.randint(int(r[0]), int(r[1])))
+            return stringify(random.randint(int(r[0]), int(r[1])))
         except:
             raise ParseError, "[random a:b] requires two integers a and b (a <= result <= b)"
     elif node.name == 'countdown':
@@ -190,7 +198,11 @@ def dotree(node, irc, origin, args, channel, variables=None):
     elif node.name == 'countup':
         return timediff(datetime.datetime.utcnow() - timelib.strtodatetime(node.attribute))
     elif node.name == 'choose':
-        return dotree(random.choice(node.children), irc, origin, args, channel, variables)
+        real_children = []
+        for child in node.children:
+            if child.name != '|':
+                real_children.append(child)
+        return dotree(random.choice(real_children), irc, origin, args, channel, variables)
     elif node.name == 'noun':
         word = word_from_file('data/nouns')
         if node.attribute == 'plural':
@@ -231,8 +243,14 @@ def dotree(node, irc, origin, args, channel, variables=None):
         except:
             pass
         return ''
+    elif node.name == 'get':
+        name = treelevel(node, irc, origin, args, channel, variables)
+        if name in variables:
+            return variables[name]
+        else:
+            return 'None'
     elif node.name == 'length':
-        return str(len(treelevel(node, irc, origin, args, channel, variables)))
+        return stringify(len(treelevel(node, irc, origin, args, channel, variables)))
     elif node.name == 'capitalise':
         contents = treelevel(node, irc, origin, args, channel, variables)
         if len(contents) > 0:
@@ -262,7 +280,7 @@ def dotree(node, irc, origin, args, channel, variables=None):
             result = eval(expression, math_functions, variables)
             if abs(result) < 0.000000001 and result != 0:
                 result = 0.0
-            return str(result)
+            return stringify(result)
         except:
             return '~B[unsolvable sums]~B'
     else:
@@ -358,7 +376,7 @@ def privmsg(irc, origin, args):
         if source is not None:
             try:
                 lines = parseline(irc, origin, args, target, source).split(r"\n")
-            except Exception, message:
+            except ParseError, message:
                 lines = [message]
             for line in lines:
                 irc_helpers.message(irc, target, line)
