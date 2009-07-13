@@ -10,5 +10,8 @@ modules = (
     'rss',
     'logger',
     'dynamic',
+    'pisg',
+    'quotes',
+    #'lastfm',
     #'irclogger'
 )

@@ -1,9 +1,10 @@
-# coding=utf-8
+# encoding=utf-8
 def format(msg):
     return msg.replace('~B', chr(2)).replace('~U', chr(31)).replace('~I', chr(22))
 
 def message(irc, target, msg, fmt=True):
-    msg = unicode(msg)
+    if not isinstance(msg, basestring):
+        msg = str(msg)
     if fmt:
         msg = format(msg)
     if msg.startswith("/me"):

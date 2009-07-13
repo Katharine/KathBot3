@@ -1,6 +1,10 @@
+# encoding=utf-8
 import os
 import os.path
 import datetime
+import threading
+
+locks = {}
 
 def init():
     add_hook('mode', mode)
@@ -12,14 +16,25 @@ def init():
     add_hook('topic', topic)
     add_hook('nick', nick)
 
+def acquire_lock(network, channel):
+    key = '%s/%s' % (network, channel)
+    if key not in locks:
+        locks[key] = threading.Lock()
+    locks[key].acquire()
+
+def release_lock(network, channel):
+    locks['%s/%s' % (network, channel)].release()
+
 def writeline(network, channel, line):
     network = network.replace('/', '_')
     channel = channel.replace('/', '_')
+    acquire_lock(network, channel)
     if not os.path.exists("data/logs/%s" % network):
         os.mkdir("data/logs/%s" % network)
     f = open("data/logs/%s/%s.log" % (network, channel), 'a')
     f.write("[%s] %s\n" % (datetime.datetime.utcnow().strftime('%m/%d/%Y %H:%M:%S'), line))
     f.close()
+    release_lock(network, channel)
 
 def privmsg(irc, origin, args):
     channel = args[0]
