@@ -215,6 +215,72 @@ def dotree(node, irc, origin, args, channel, variables=None):
                 return "%ss" % word
         else:
             return word
+    #Hi from Davy ~7-13-09.
+    elif node.name == 'verb1':
+        indexes = {'present': 0, 'past': 1, 'pastpart': 2}
+        word = word_from_file('data/verbs')
+        tense = node.attribute
+        
+        #If no tense(or invalid tense), use present tense.
+        if tense not in indexes:
+            tense = 'present'
+        
+        if word.find('|') != -1:
+            #Irregular verb
+            tenses = word.split('|')
+            word = tenses[indexes[tense]]
+            return word
+        else:
+            vowels = 'aeiou'
+            #Regular verb
+            if tense == 'present':
+                return word
+            elif word[-1] in vowels:
+                return '%sd' % word
+            elif (word[-2] == 'u' and word[-3] not in vowels):
+                return '%s%sed' % (word, word[-1])
+            else:
+                return '%sed' % word
+
+    #Byes <3
+    elif node.name == 'verb':
+        verb = word_from_file('data/verbs')
+        tense = node.attribute or 'root'
+        if verb.find('|') != -1:
+            # Figure out what we're going to do about this later...
+            pass
+        else:
+            if tense == 'root':
+                return verb
+            elif tense == 'first' or tense == 'second':
+                return verb
+            elif tense == 'third':
+                if verb[-1] in 'szx' or verb[-2:] in ('ch', 'sh'):
+                    return '%ses' % verb
+                elif verb[-1] == 'y' and verb[-2] not in 'aeiou':
+                    return '%sies' % verb[:-1]
+                else:
+                    return '%ss' % verb
+            else:
+                if verb[-1] not in 'aeiouy' and verb[-2] in 'aeiou':
+                    # This check sucks.
+                    if (len(verb) == 3 or (len(verb) == 4 and verb[-1] == 'p')):
+                        verb += verb[-1]
+                
+                if tense == 'pastpart' or tense == 'past':
+                    if verb[-1] == 'e':
+                        return '%sd' % verb
+                    elif verb[-1] == 'y' and verb[-2] not in 'aeiou':
+                        return '%sied' % verb[:-1]
+                    else:
+                        return '%sed' % verb
+                elif tense == 'presentpart' or tense == 'gerund':
+                    if verb[-1] == 'e':
+                        return '%sing' % verb[:-1]
+                    else:
+                        return '%sing' % verb
+                else:
+                    return '~B[unknown tense "%s"]~B' % tense
     elif node.name == 'adjective':
         return word_from_file('data/adjectives')
     elif node.name == 'adverb':

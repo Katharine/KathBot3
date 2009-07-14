@@ -14,7 +14,7 @@ def message(irc, target, msg, fmt=True):
 def notice(irc, target, msg, fmt=True):
     if fmt:
         msg = format(msg)
-    irc.raw("NOTICE %s: %s" % (target, msg))
+    irc.raw("NOTICE %s :%s" % (target, msg))
 
 def join(irc, channel, passkey=None):
     if passkey:
