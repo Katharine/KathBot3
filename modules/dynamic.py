@@ -215,34 +215,6 @@ def dotree(node, irc, origin, args, channel, variables=None):
                 return "%ss" % word
         else:
             return word
-    #Hi from Davy ~7-13-09.
-    elif node.name == 'verb1':
-        indexes = {'present': 0, 'past': 1, 'pastpart': 2}
-        word = word_from_file('data/verbs')
-        tense = node.attribute
-        
-        #If no tense(or invalid tense), use present tense.
-        if tense not in indexes:
-            tense = 'present'
-        
-        if word.find('|') != -1:
-            #Irregular verb
-            tenses = word.split('|')
-            word = tenses[indexes[tense]]
-            return word
-        else:
-            vowels = 'aeiou'
-            #Regular verb
-            if tense == 'present':
-                return word
-            elif word[-1] in vowels:
-                return '%sd' % word
-            elif (word[-2] == 'u' and word[-3] not in vowels):
-                return '%s%sed' % (word, word[-1])
-            else:
-                return '%sed' % word
-
-    #Byes <3
     elif node.name == 'verb':
         verb = word_from_file('data/verbs')
         tense = node.attribute or 'root'
@@ -285,6 +257,8 @@ def dotree(node, irc, origin, args, channel, variables=None):
         return word_from_file('data/adjectives')
     elif node.name == 'adverb':
         return word_from_file('data/adverbs')
+    elif node.name == 'interjection':
+        return word_from_file('data/interjections')
     elif node.name == '|':
         return ''
     elif node.name == 'rnick':
@@ -319,8 +293,19 @@ def dotree(node, irc, origin, args, channel, variables=None):
         return stringify(len(treelevel(node, irc, origin, args, channel, variables)))
     elif node.name == 'capitalise':
         contents = treelevel(node, irc, origin, args, channel, variables)
-        if len(contents) > 0:
-            contents = contents[0].upper() + contents[1:]
+        if node.attribute == '' or node.attribute == 'first':
+            if len(contents) > 0:
+                contents = contents[0].upper() + contents[1:]
+        elif node.attribute == 'words':
+            words = contents.split(' ')
+            contents = ''
+            for word in words:
+                contents += word[0].upper() + word[1:] + ' '
+            return contents.strip()
+        elif node.attribute == 'all':
+            return contents.upper()
+        else:
+            return contents
         return contents
     elif node.name == 'indefinite':
         phrase = treelevel(node, irc, origin, args, channel, variables)
