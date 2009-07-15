@@ -23,7 +23,8 @@ class KBHTTPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.0'
     
     def send_output(self, output, discard_body=False, content_type='text/html; charset=utf-8', content_encoding=None):
-        output = output.encode('utf-8')
+        if content_type.startswith('text/'):
+            output = output.encode('utf-8')
         self.send_response(200)
         self.send_header("Content-Length", str(len(output)))
         self.send_header("Content-Type", content_type)

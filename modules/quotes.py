@@ -1,7 +1,12 @@
+# encoding=utf-8
 import datetime
 
 def init():
     add_hook('privmsg', privmsg)
+    m('webserver').add_handler('GET', quotes_page)
+
+def shutdown():
+    m('webserver').remove_handlers()
 
 def addquote(nick, quote):
     m('datastore').execute("INSERT INTO quotes (quote, nick) VALUES (?, ?)", quote, nick)
@@ -23,7 +28,6 @@ def getquote(number=None, search=None):
     
     args.append(limit)
     results = m('datastore').query(query % (restriction, order),  *args)
-    logger.debug(results)
     if len(results) == 0:
         return None
     else:
@@ -58,8 +62,41 @@ def privmsg(irc, origin, args):
             for line in lines:
                 irc_helpers.message(irc, target, "~B[Quote]~B %s" % line)
                 
-            irc_helpers.message(irc, target, "~B[Quote]~B Added %s by %s." % (quote.added.strftime('at %l:%M%P on %A, %e %B, %Y').replace('  ',' '), quote.nick))
+            irc_helpers.message(irc, target, "~B[Quote]~B Added %s by %s." % (quote.format_added(), quote.nick))
 
+def quotes_page(request):
+    logger.info("Returning main quote page.")
+    parts = request.path[1:].split('/')
+    if len(parts) == 1:
+        output = """<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html>
+    <head>
+        <title>KathBot3 quotes!</title>
+        <script src="http://ajax.googleapis.com/ajax/libs/prototype/1.6.0.3/prototype.js" type="text/javascript"></script>
+        <script src="/static/quotes/quotes.js" type="text/javascript"></script>
+        <link href="/static/quotes/quotes.css" type="text/css" rel="stylesheet" />
+    </head>
+    <body>
+        <h1>Quotes!</h1>
+        <div id="quotes">"""
+        quotes = m('datastore').query("SELECT id, nick, added FROM quotes")
+        for quote in quotes:
+            quote = Quote(number=quote[0], nick=quote[1], added=quote[2])
+            output += u"""
+            <div class="quote">
+                <div class="quote-header">Quote #%s – added by %s %s</div>
+                <div class="quote-content" id="content-%s" style="display: none;"></div>
+            </div>""" % (quote.number, quote.nick, quote.format_added(), quote.number)
+        
+        output += """
+        </div>
+    </body>
+</html>
+"""
+        return output
+    else:
+        return '<div class="quote">%s</div>' % getquote(number=int(parts[1])).quote.replace("\n", "<br />")
+    
 class Quote(object):
     nick = ''
     quote = ''
@@ -71,3 +108,6 @@ class Quote(object):
         self.quote = quote
         self.added = datetime.datetime.strptime(added, '%Y-%m-%d %H:%M:%S')
         self.number = number
+    
+    def format_added(self):
+        return self.added.strftime('at %l:%M%P on %A, %e %B, %Y').replace('  ',' ')
