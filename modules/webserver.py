@@ -1,9 +1,13 @@
+# encoding=utf-8
 import BaseHTTPServer
 import SocketServer
 import threading
 import inspect
 import os.path
 import urllib2
+import urlparse
+import traceback
+import mimetypes
 
 web_handlers = {}
 
@@ -18,25 +22,53 @@ class KBHTTPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     server_version = 'KathBot/3'
     protocol_version = 'HTTP/1.0'
     
-    def send_output(self, output, discard_body=False):
+    def send_output(self, output, discard_body=False, content_type='text/html; charset=utf-8', content_encoding=None):
+        output = output.encode('utf-8')
         self.send_response(200)
         self.send_header("Content-Length", str(len(output)))
+        self.send_header("Content-Type", content_type)
+        if content_encoding is not None:
+            self.send_header("Content-Encoding", content_encoding)
         self.end_headers()
         if not discard_body:
             self.wfile.write(output)
     
     def do_something(self, method, discard_body=False):
+        parts = urlparse.urlparse(self.path)
+        self.path = parts[2]
+        self.query = parts[4]
         if self.path == '/':
             self.send_output(generate_index_page(self), discard_body)
+        elif self.path.startswith('/static/'):
+            if method == 'POST':
+                self.send_error(405)
+            else:
+                try:
+                    path = 'data/web/' + self.path.replace('..', '')[8:]
+                    f = open(path, 'rb')
+                    content = f.read()
+                    f.close()
+                    content_type, content_encoding = mimetypes.guess_type(path, strict=False)
+                    if content_type is None:
+                        content_type = 'application/octet-stream'
+                    self.send_output(content, content_type=content_type, content_encoding=content_encoding)
+                except IOError:
+                    self.send_error(404)
         else:
             requested_module = self.path.split('/')[1]
             if requested_module in web_handlers:
                 if method in web_handlers[requested_module]:
                     try:
                         output = web_handlers[requested_module][method](self)
-                        self.send_output(output, discard_body)
+                        if output is None:
+                            self.send_error(404)
+                        else:
+                            self.send_output(output, discard_body)
                     except Exception, message:
+                        logger.error(traceback.format_exc())
                         self.send_error(500, str(message))
+                else:
+                    self.send_error(405)
             else:
                 self.send_error(404)
     
@@ -104,14 +136,11 @@ def generate_index_page(request):
 
 # Note: This function *must* be called by the function called by the other module.
 def get_calling_module():
-    try:
-        record = inspect.stack()[2]
-        filename = os.path.split(record[1])
-        if filename[1].startswith('__init__.py'):
-            filename = os.path.split(filename[0])
-        
-        module = filename[1].split('.')[0]
-    finally:
-        del record
+    record = inspect.stack()[2][1]
+    filename = os.path.split(record)
+    if filename[1].startswith('__init__.py'):
+        filename = os.path.split(filename[0])
+    
+    module = filename[1].split('.')[0]
     
     return module
