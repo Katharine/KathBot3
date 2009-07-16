@@ -14,7 +14,9 @@ class IRCHandler(logging.Handler):
             if not irc.connected:
                 continue
             try:
-                m('irc_helpers').message(irc, irc.network.primary_channel, self.format(record))
+                lines = self.format(record).split("\n")
+                for line in lines:
+                    m('irc_helpers').message(irc, irc.network.primary_channel, line)
             except:
                 pass
 

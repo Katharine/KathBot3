@@ -24,20 +24,20 @@ class LastFMPoll(threading.Thread):
             irc = networks.networks[network]
             channels = m('chantrack').nick_channels(irc, nick)
             for channel in channels:
-                #m('irc_helpers').message(irc, channel, "~B[last.fm]~B %s is listening to %s by %s" % (nick, song, artist))
-                m('logger').privmsg(irc, User(nick=nick), [channel, '\x01ACTION is listening to "%s" by %s (last.fm).\x01' % (song, artist)])
+                m('irc_helpers').message(irc, channel, "~B[last.fm]~B %s is listening to %s by %s" % (nick, song, artist))
+                #m('logger').privmsg(irc, User(nick=nick), [channel, '\x01ACTION is listening to "%s" by %s (last.fm).\x01' % (song, artist)])
     
     def update_all(self):
         users = m('datastore').query("SELECT nick, lastfm, lastid FROM lastfm")
         for user in users:
             try:
                 data = self.get_latest(user[1])
+                if user[2] is None or int(data[0]) != int(user[2]):
+                    m('datastore').execute("UPDATE lastfm SET lastid = ?, lastsong = ? WHERE nick = ?", data[0], data[1], user[0])
+                    self.log_update(user[0], data[1])
             except Exception, message:
                 logger.warn("Failed loading data for %s: %s." % (user[0], message))
                 continue
-            if user[2] is None or int(data[0]) != int(user[2]):
-                m('datastore').execute("UPDATE lastfm SET lastid = ?, lastsong = ? WHERE nick = ?", data[0], data[1], user[0])
-                self.log_update(user[0], data[1])
     
     def run(self):
         while self.running:

@@ -321,9 +321,16 @@ def dotree(node, irc, origin, args, channel, variables=None):
                 'ceil': math.ceil,
                 'floor': math.floor,
                 'round': round,
-                'sin': lambda theta: math.sin(theta * (math.pi/180)),
-                'cos': lambda theta: math.cos(theta * (math.pi/180)),
-                'tan': lambda theta: math.tan(theta * (math.pi/180)),
+                'sin': lambda theta: math.sin(math.radians(theta)),
+                'cos': lambda theta: math.cos(math.radians(theta)),
+                'tan': lambda theta: math.tan(math.radians(theta)),
+                'asin': lambda x: math.degrees(math.asin(x)),
+                'acos': lambda x: math.degrees(math.acos(x)),
+                'atan': lambda x: math.degrees(math.atan(x)),
+                'log': math.log,
+                'ln': lambda a: math.log(a),
+                'log10': math.log10,
+                'e': math.e,
                 'pi': math.pi,
                 'sqrt': math.sqrt,
                 '__builtins__': None,
@@ -366,6 +373,10 @@ def format_source(node):
 
 def init():
     add_hook('privmsg', privmsg)
+    try:
+        m('webserver').add_handler('GET', weblist)
+    except ModuleNotLoaded:
+        pass
 
 def find_command(command):
     result = m('datastore').query("SELECT source FROM dynamic WHERE command = ?", command)
@@ -378,7 +389,6 @@ def privmsg(irc, origin, args):
     target, command, args = irc_helpers.parse(args)
     if command in ('add', 'delete', 'source', 'append'):
         if not m('security').check_action_permissible(origin, "%s" % command):
-            irc_helpers.message(irc, target, "You don't have permission to do this.")
             return
         
         if command == 'add':
@@ -431,7 +441,29 @@ def privmsg(irc, origin, args):
                 lines = [message]
             for line in lines:
                 irc_helpers.message(irc, target, line)
-                
+
+def weblist(request):
+    content = """
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html>
+    <head>
+        <title>Dynamic command listing</title>
+    </head>
+    <body>
+        <h1>Dynamic commands</h1>
+        <ul>
+"""
+    commands = m('datastore').query("SELECT command FROM dynamic")
+    for command in commands:
+        content += """
+        <li>%s</li>""" % command[0]
+    
+    content += """
+        </ul>
+    </body>
+</html>"""
+    return content
+
 def timediff(delta):
     seconds = delta.days * 86400 + delta.seconds
     if seconds < 0:

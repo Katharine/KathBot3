@@ -112,6 +112,7 @@ def init():
 
 def shutdown():
     server.shutdown()
+    # This hack lets the server thread *actually* terminate.
     try:
         f = urllib2.urlopen('http://127.0.0.1:8765/')
         f.read(1)

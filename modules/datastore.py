@@ -21,7 +21,10 @@ class sqlite(threading.Thread):
                 cursor.execute(request, args)
                 
                 if result:
-                    result.put(cursor.fetchall())
+                    if request.startswith("INSERT"):
+                        result.put(cursor.lastrowid)
+                    else:
+                        result.put(cursor.fetchall())
                 else:
                     connection.commit()
             except (sqlite3.OperationalError, sqlite3.InterfaceError, sqlite3.IntegrityError), message:
