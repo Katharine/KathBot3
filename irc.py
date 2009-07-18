@@ -9,13 +9,14 @@ class IRC(threading.Thread):
     network = None
     socket = None
     connected = False
-    writelock = threading.Lock()
+    writelock = None
     nick = ''
 
     def __init__(self, network):
         if not isinstance(network, Network):
             raise TypeError
         self.network = network
+        self.writelock = threading.Lock()
         threading.Thread.__init__(self, name=network.name)
         
     def run(self):

@@ -139,6 +139,7 @@ class ZMachine(threading.Thread):
         if not os.path.isfile(self.story):
           raise IOError, "%s does not exist!" % story
         threading.Thread.__init__(self, name="%s/%s/%s" % (irc.network.name, channel, story))
+        self.setDaemon(True)
         
     def run(self):
         self.load_story()

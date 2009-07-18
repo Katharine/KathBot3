@@ -44,7 +44,7 @@ def privmsg(irc, origin, args):
                 try:
                     modules.load_module(module)
                 except Exception, msg:
-                    irc_helpers.message(irc, target, "Couldn't load %s: %s" % (module, msg))
+                    irc_helpers.message(irc, target, "Couldn't load %s: %s." % (module, msg))
                 else:
                     irc_helpers.message(irc, target, "Loaded %s" % module)
         elif command == 'unload':

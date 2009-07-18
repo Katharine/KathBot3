@@ -1,4 +1,5 @@
 from datetime import datetime
+import modules
 
 channels = {}
 
@@ -23,6 +24,7 @@ def join(irc, origin, args):
         network(irc)[channel] = Channel(name=channel)
         network(irc)[channel].users[origin.nick.lower()] = origin.nick
         logger.info("Added channel %s/%s" % (irc.network, channel))
+        modules.call_hook('joined', irc, channel)
     else:
         network(irc)[channel].users[origin.nick.lower()] = origin.nick
         logger.info("Added nick %s to %s/%s" % (origin.nick, irc.network, channel))
@@ -52,6 +54,7 @@ def part(irc, origin, args):
     if irc.nick == origin.nick:
         del network(irc)[channel]
         logger.info("Removed channel %s/%s" % (irc.network, channel))
+        modules.call_hook('parted', irc, channel)
     else:
         del network(irc)[channel].users[origin.nick.lower()]
         logger.info("Removed nick %s from %s/%s" % (origin.nick, irc.network, channel))
@@ -62,6 +65,7 @@ def kick(irc, origin, args):
     if nick == irc.nick.lower():
         del network(irc)[channel]
         logger.info("Removed channel %s/%s" % (irc.network.name, channel))
+        modules.call_hook('parted', irc, channel)
     else:
         del network(irc)[channel].users[nick]
         logger.info("Removed nick %s from %s/%s" % (origin.nick, irc.network, channel))

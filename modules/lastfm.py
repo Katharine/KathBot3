@@ -49,6 +49,7 @@ poll = None
 def init():
     global poll
     poll = LastFMPoll()
+    poll.setDaemon(True)
     poll.start()
     
     add_hook('privmsg', privmsg)

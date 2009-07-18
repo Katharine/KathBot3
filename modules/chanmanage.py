@@ -1,4 +1,7 @@
+import time
+
 automode = {}
+mutes = {}
 
 def init():
     add_hook('connected', connected)
@@ -56,6 +59,22 @@ def privmsg(irc, origin, args):
         m('datastore').execute("REPLACE INTO chanmanage_modes (channel, uid, modes) VALUES (?, ?, ?)", target.lower(), uid, modes)
         irc.raw("MODE %s +%s %s" % (target, modes, (nick + " ") * len(modes)))
         irc_helpers.message(irc, target, "Set mode ~B+%s~B for ~B%s~B in ~B%s~B." % (modes, nick, target))
+    elif command == 'mute':
+        modes = automodes(irc.network.name, target)
+        if modes == '':
+            irc_helpers.message(irc, target, "This channel has no automode, so muting makes no sense")
+        try:
+            nick = args[0]
+            period = int(args[1])
+        except:
+            irc_helpers.message(irc, target, "Usage: mute [nick] [time]")
+        key = '%s/%s' % (irc.network, target)
+        if key not in mutes:
+            mutes[key] = set()
+        mutes[key].add(nick.lower())
+        irc.raw("MODE %s -%s %s" % (target, modes, (nick + ' ') * len(modes)))
+        m('cron').add_at(time.time() + period * 60, unmute, irc, target, nick)
+        irc_helpers.message(irc, target, "Muted %s for %s minutes." % (nick, period))
 
 def connected(irc):
     channels = m('datastore').query("SELECT channel, passkey FROM channels WHERE network = ?", irc.network.name)
@@ -64,9 +83,12 @@ def connected(irc):
 
 def join(irc, origin, args):
     channel = args[0].lower()
-    modes = ''
-    if automode.get(irc.network.name) and automode[irc.network.name.lower()].get(channel):
-        modes += automode[irc.network.name][channel]
+    try:
+        if origin.nick.lower() in mutes['%s/%s' % (irc.network, channel)]:
+            return
+    except:
+        pass
+    modes = automodes(irc.network.name, channel)
     
     uid = m('security').get_user_id(origin)
     if uid is not None:
@@ -75,3 +97,19 @@ def join(irc, origin, args):
             modes += user_modes[0][0]
     
     irc.raw("MODE %s +%s %s" % (channel, modes, (origin.nick + " ") * len(modes)))
+
+def automodes(network, channel):
+    if automode.get(network) and automode[network.lower()].get(channel):
+        return automode[network][channel]
+    return ''
+
+def unmute(irc, channel, nick):
+    key = '%s/%s' % (irc.network, channel)
+    if key not in mutes:
+        return
+    if nick.lower() not in mutes[key]:
+        return
+    mutes[key].remove(nick.lower())
+    modes = automodes(irc.network.name, channel)
+    if modes:
+        irc.raw("MODE %s +%s %s" % (channel, modes, (nick + ' ') * len(modes)))

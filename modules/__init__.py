@@ -52,6 +52,7 @@ def load_module(module):
         pass
     else:
         init_module()
+    call_hook('loaded', module)
     logging.info("Loaded module %s", module)
     
 def unload_module(module):
@@ -68,3 +69,4 @@ def unload_module(module):
     
     del mods[module]
     del sys.modules['modules.%s' % module]
+    call_hook('unloaded', module)
