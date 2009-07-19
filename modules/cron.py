@@ -39,7 +39,7 @@ class CronManager(threading.Thread):
         with self.lock:
             for i in range(0, len(self.cron_jobs)):
                 job = self.cron_jobs[i]
-                if job.last_execution + job.interval <= now:
+                if job.last_execution + job.period <= now:
                     try:
                         job.last_execution = now
                         threading.Thread(target=job.handler, args=job.args, name="CronJob/%s" % job.module).start()
@@ -79,7 +79,7 @@ class CronManager(threading.Thread):
     def add_cron(self, module, period, handler, args):
         job = CronJob(module=module, period=period, handler=handler, args=args)
         with self.lock:
-            self.cron_jons.append(job)
+            self.cron_jobs.append(job)
         logger.info("Added cron job for %s" % module)
 
 manager = None
@@ -125,7 +125,8 @@ class CronJob(object):
         self.module = module
         self.period = period
         self.handler = handler
-        self.args = args or ()
+        self.args = args
+        self.last_execution = time.time()
 
 class AtJob(object):
     def __init__(self, module='', at=0, handler=None, args=()):

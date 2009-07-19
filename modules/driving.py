@@ -38,6 +38,7 @@ def privmsg(irc, origin, args):
                     irc_helpers.message(irc, target, "~B[Theory] Correct! :D~B")
                 else:
                     irc_helpers.message(irc, target, "~B[Theory] Incorrect. The correct answer was %s" % ', '.join(expected))
+                irc_helpers.message(irc, target, "~B[Theory]~B %s" % question.explanation)
                 del current_question[key]
                 
 
@@ -47,12 +48,13 @@ def get_question(filename=None):
     xml = dom.parse('data/driving/' + filename)
     question = xml.getElementsByTagName('question')[0].getElementsByTagName('text')[0].firstChild.data
     prompt = xml.getElementsByTagName('prompt')[0].firstChild.data
+    explanation = xml.getElementsByTagName('explanation')[0].getElementsByTagName('text')[0].firstChild.data
     options = []
     for option in xml.getElementsByTagName('answer'):
         options.append(Option(text=option.getElementsByTagName('text')[0].firstChild.data, correct=(option.getAttribute('correct') == 'yes')))
     
     xml.unlink()
-    return Question(text=question, prompt=prompt, options=options, filename=filename)
+    return Question(text=question, prompt=prompt, options=options, filename=filename, explanation=explanation)
 
 class Option(object):
     def __init__(self, text='', correct=False):
@@ -60,10 +62,11 @@ class Option(object):
         self.correct = correct
 
 class Question(object):
-    def __init__(self, text='', prompt='', options=None, filename=None):
+    def __init__(self, text='', prompt='', options=None, filename=None, explanation=''):
         self.text = text
         self.prompt = prompt
         self.options = options
         self.filename = filename
+        self.explanation = explanation
         if options is None:
             self.options = []

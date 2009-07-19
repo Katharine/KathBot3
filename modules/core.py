@@ -49,8 +49,11 @@ def privmsg(irc, origin, args):
                     irc_helpers.message(irc, target, "Loaded %s" % module)
         elif command == 'unload':
             for module in args:
-                modules.unload_module(module)
-                irc_helpers.message(irc, target, "Unloaded %s" % module)
+                try:
+                    modules.unload_module(module)
+                    irc_helpers.message(irc, target, "Unloaded %s" % module)
+                except ModuleNotLoaded:
+                    irc_helpers.message(irc, target, "Couldn't unload %s; it's not loaded." % module)
         elif command == 'reload':
             for module in args:
                 try:
@@ -66,6 +69,9 @@ def privmsg(irc, origin, args):
         elif command == 'threads':
             threads = u' · '.join(sorted(['~B%s~B: %s' % (x.__class__.__name__, x.getName()) for x in threading.enumerate()]))
             irc_helpers.message(irc, target, '~B[THREADING]~B %s' % threads)
+        elif command == 'modules':
+            mod = u' · '.join(sorted(modules.mods.keys()))
+            irc_helpers.message(irc, target, '~B[Modules]~B %s' % mod)
         elif command == 'terminate':
             reason = ''
             if len(args) > 0:

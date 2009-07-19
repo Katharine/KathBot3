@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<QF id="AA0001" topic="Sample" category="C&amp;M" ni_exempt="no">
+	<question>
+		<text>What colour is grass?</text>
+		<prompt>Mark one answer</prompt>
+	</question>
+	<answers>
+		<answer correct="no">
+			<text>Blue</text>
+			<graphic></graphic>
+		</answer>
+		<answer correct="no">
+			<text>Pink</text>
+			<graphic></graphic>
+		</answer>
+		<answer correct="no">
+			<text>Red</text>
+			<graphic></graphic>
+		</answer>
+		<answer correct="yes">
+			<text>Green</text>
+			<graphic></graphic>
+		</answer>
+	</answers>
+	<explanation>
+		<text>If your grass *isn't* green, something is very wrong.</text>
+	</explanation>
+</QF>

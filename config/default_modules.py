@@ -1,6 +1,7 @@
 # irc_helpers should/must always be first.
 modules = (
     'irc_helpers',
+    'cron',
     'webserver',
     'core',
     'datastore',
