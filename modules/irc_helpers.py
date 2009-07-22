@@ -1,15 +1,58 @@
+class PotentialInfiniteLoop(Exception): pass
+from xml.sax.saxutils import unescape
+import re
+
 # encoding=utf-8
 def format(msg):
     return msg.replace('~B', chr(2)).replace('~U', chr(31)).replace('~I', chr(22))
 
-def message(irc, target, msg, fmt=True):
+last_line = ""
+uses = 0
+def message(irc, target, msg, fmt=True, tag=None):
+    global last_line, uses
     if not isinstance(msg, basestring):
         msg = str(msg)
-    if fmt:
-        msg = format(msg)
-    if msg.startswith("/me"):
-        msg = "\x01ACTION %s\x01" % msg[4:]
-    irc.raw("PRIVMSG %s :%s" % (target, msg))
+    # Infinite loop?
+    if msg == last_line:
+        uses += 1
+        if uses > 10:
+            raise PotentialInfiniteLoop
+    else:
+        last_line = msg
+        uses = 1
+    
+
+    
+    lines = msg.split("\n")
+    pre_B = False
+    pre_I = False
+    pre_U = False
+    for line in lines:
+        if not line:
+            continue
+        if pre_B:
+            line = '~B' + line
+        if pre_I:
+            line = '~I' + line
+        if pre_U:
+            line = '~U' + line
+        pre_B, pre_I, pre_U = (False, False, False)
+        if line.count('~B') % 2 == 1:
+            pre_B = True
+            line += '~B'
+        if line.count('~I') % 2 == 1:
+            pre_I = True
+            line += '~I'
+        if line.count('~U') % 2 == 1:
+            pre_U = True
+            line += '~U'
+        if fmt:
+            line = format(line)
+        if tag is not None:
+            line = '\x02[%s]\x02 %s' % (tag, line)
+        elif line.startswith("/me"):
+            line = "\x01ACTION %s\x01" % line[4:]
+        irc.raw("PRIVMSG %s :%s" % (target, line))
 
 def notice(irc, target, msg, fmt=True):
     if fmt:
@@ -33,3 +76,17 @@ def parse(args):
     line = line.split(' ')
     command = line.pop(0)
     return args[0], command, line
+
+def html_to_irc(html):
+    # Deal with formatting tags
+    irc = re.sub('(?:</(?:b|em|i|strong)>){2}', '</b>', re.sub('(?:<(?:b|em|i|strong)>){2}', '<b>', html))
+    irc = re.sub('<br[^>]*>', '\n', re.sub('</?u>', '~U', re.sub('</?(?:b|em|i)>', '~B', irc)))
+    # Deal with image tags
+    irc = re.sub(r'<img.*?src="(.+?(?:\.png|\.jpg))".*?>', r'\1', irc)
+    # Clear left-over tags
+    irc = re.sub('<.+?>', '', irc)
+    # Deal with entities
+    irc = unescape(re.sub('&#([0-9]+);?', lambda x: unichr(int(x.group(1))), irc))
+    # Deal with newlines
+    irc = re.sub('\n+', '\n', irc)
+    return irc

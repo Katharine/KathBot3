@@ -63,11 +63,13 @@ def privmsg(irc, origin, args):
         modes = automodes(irc.network.name, target)
         if modes == '':
             irc_helpers.message(irc, target, "This channel has no automode, so muting makes no sense")
+            return
         try:
             nick = args[0]
             period = int(args[1])
         except:
             irc_helpers.message(irc, target, "Usage: mute [nick] [time]")
+            return
         key = '%s/%s' % (irc.network, target)
         if key not in mutes:
             mutes[key] = set()

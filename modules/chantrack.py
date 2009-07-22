@@ -68,7 +68,7 @@ def kick(irc, origin, args):
         modules.call_hook('parted', irc, channel)
     else:
         del network(irc)[channel].users[nick]
-        logger.info("Removed nick %s from %s/%s" % (origin.nick, irc.network, channel))
+        logger.info("Removed nick %s from %s/%s" % (nick, irc.network, channel))
 
 def quit(irc, origin, args):
     if origin.nick == irc.nick:

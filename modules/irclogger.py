@@ -6,7 +6,7 @@ handler = None
 class IRCHandler(logging.Handler):
     def __init__(self, *args, **kwds):
         logging.Handler.__init__(self, *args, **kwds)
-        self.setFormatter(logging.Formatter('~B[%(levelname)s]~B %(name)s: %(message)s'))
+        self.setFormatter(logging.Formatter('%(levelname)s %(name)s: %(message)s'))
         
     def emit(self, record):
         for network in networks:
@@ -14,9 +14,8 @@ class IRCHandler(logging.Handler):
             if not irc.connected:
                 continue
             try:
-                lines = self.format(record).split("\n")
-                for line in lines:
-                    m('irc_helpers').message(irc, irc.network.primary_channel, line)
+                line = self.format(record).split(' ', 1)
+                m('irc_helpers').message(irc, irc.network.primary_channel, line[1], tag=line[0])
             except:
                 pass
 

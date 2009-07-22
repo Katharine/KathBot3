@@ -6,6 +6,9 @@ import networks
 import logging
 
 def main():
+    import locale
+    locale.setlocale(locale.LC_NUMERIC, '')
+    
     for module in config.modules:
         modules.load_module(module)
     

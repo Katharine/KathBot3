@@ -1,0 +1,87 @@
+# encoding=utf-8
+import urllib2
+from urllib import quote as escapeurl
+import re
+from xml.sax.saxutils import escape, unescape
+import random
+import textwrap
+
+COMMANDS = frozenset(('google', 'wikipedia', 'wiki',))
+
+# Various UAs from Safari's Develop menu.
+USER_AGENTS = (
+    'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_5_7; en-us) AppleWebKit/530.17 (KHTML, like Gecko) Version/4.0 Safari/530.17',
+    'Mozilla/5.0 (iPhone; U; CPU iPhone OS 3_0 like Mac OS X; en-us) AppleWebKit/528.18 (KHTML, like Gecko) Version/4.0 Mobile/7A341 Safari/528.16',
+    'Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.0; Trident/4.0)',
+    'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0)',
+    'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1; SV1)',
+    'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10.5; en-US; rv:1.9.0.10) Gecko/2009042315 Firefox/3.0.10',
+    'Mozilla/5.0 (Windows; U; Windows NT 6.0; en-US; rv:1.9.0.10) Gecko/2009042316 Firefox/3.0.10',
+    'Opera/9.64 (Macintosh; Intel Mac OS X; U; en) Presto/2.1.1',
+    'Opera/9.64 (Windows NT 6.0; U; en) Presto/2.1.1',
+)
+
+def load_url(url):
+    handle = urllib2.urlopen(urllib2.Request(url, headers={'User-Agent': random.choice(USER_AGENTS)}))
+    data = handle.read().decode('utf-8')
+    handle.close()
+    return data
+
+def init():
+    add_hook('privmsg', privmsg)
+
+def privmsg(irc, origin, args):
+    irch = m('irc_helpers')
+    target, command, args = irch.parse(args)
+    if command not in COMMANDS:
+        return
+    format = irch.html_to_irc
+    if command == 'google':
+        if len(args) == 0:
+            irch.message(irc, target, "~B[Google]~B Please supply a search query.")
+            return
+        search = ' '.join(args)
+        try:
+            data = load_url('http://www.google.com/search?hl=en&q=%s&aq=f&oq=&aqi=g10' % escapeurl(search))
+            result = re.search('<li class=g>.*?<a href="([^"]+?)"[^>]+?>(.+?)</a>.*?<div.*?>(.+?)<br' ,data, re.S)
+            if result is not None:
+                irch.message(irc, target, "~U%s~U" % format(result.group(2)), tag='Google')
+                irch.message(irc, target, format(result.group(3)), tag='Google')
+                irch.message(irc, target, "URL: %s" % format(result.group(1)), tag='Google')
+            else:
+                irch.message(irc, target, "No search results could be found.", tag='Google')
+        except urllib2.HTTPError:
+            irch.message(irc, target, "An error occurred and the search could not be completed.", tag='Google')
+    elif command == 'wikipedia' or command == 'wiki':
+        if len(args) == 0:
+            args = ['Special:Random']
+        page = ' '.join(args)
+        url = 'http://en.wikipedia.org/wiki/%s' % escapeurl(page.replace(' ','_'))
+        try:
+            text = load_url(url)
+        except urllib2.HTTPError:
+            irch.message(irc, target, '~B%s~B does not exist.' % page, tag='Wikipedia')
+            return
+        title = re.search('<title>(.+?) - Wikipedia, the free encyclopedia</title>', text).group(1)
+        if page.lower() != title.lower():
+            redir = title
+            url = 'http://en.wikipedia.org/wiki/%s' % escapeurl(redir.replace(' ', '_'))
+        else:
+            redir = None
+        old_text = text
+        while '</table>' in old_text and old_text.find('</table>') < old_text.find('<p>'):
+            old_text = text
+            text = text[text.find('</table')+8:]
+        text = old_text
+        del old_text
+        text = re.sub('(?is)<div class=.+?>.+?</div>', '', text)
+        summary = re.search('(?is)<p>([^<>]{0,15}<b>[^<>]+?</b>[^<>]{2,2}.+?)</p>', text)
+        if summary is None:
+            summary = re.search('(?is)<p>(.+?)</p>', text)
+        
+        summary = format(re.sub('</?a.*?>', '<u>', summary.group(1)))
+        summary = re.sub(r'(?is)\[(?:[0-9]+?|[a-z]+? needed)\]',  '', summary)
+        if redir is not None:
+            irch.message(irc, target, "~URedirected to %s~U" % redir, tag='Wikipedia')
+        irch.message(irc, target, '\n'.join(textwrap.wrap(summary, 400)), tag='Wikipedia')
+        irch.message(irc, target, 'Please see %s for more.' % url, tag='Wikipedia')

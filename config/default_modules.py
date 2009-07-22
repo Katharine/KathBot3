@@ -8,12 +8,17 @@ modules = (
     'security',
     'chantrack',
     'chanmanage',
+    'ctcp',
     'zmachine',
     'rss',
     'logger',
     'dynamic',
     'pisg',
     'quotes',
+    'driving',
+    'reference',
+    'supposedlyfunny',
+    'datastoreirc',
     #'lastfm',
     #'irclogger'
 )

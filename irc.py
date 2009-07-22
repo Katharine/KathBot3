@@ -1,3 +1,4 @@
+from __future__ import with_statement
 import socket
 import logging
 import threading
@@ -38,9 +39,8 @@ class IRC(threading.Thread):
         if not self.socket:
             raise ConnectionNotReady
         logging.debug("->%s\t%s" % (self.network, message))
-        self.writelock.acquire()
-        self.socket.send(("%s\n" % message).encode('utf-8'))
-        self.writelock.release()
+        with self.writelock:
+            self.socket.send(("%s\n" % message).encode('utf-8'))
         
     def disconnected(self):
         modules.call_hook('disconnected')

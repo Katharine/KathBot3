@@ -9,6 +9,7 @@ import datetime
 POLL_INTERVAL = 300
 
 def init():
+    feedparser.USER_AGENT = 'KathBot/3'
     add_hook('privmsg', privmsg)
     m('cron').add_cron(POLL_INTERVAL, poll)
     logger.info("Registered cron job every %s seconds." % POLL_INTERVAL)
@@ -32,13 +33,6 @@ def privmsg(irc, origin, args):
         m('datastore').execute("INSERT INTO rss_subscriptions(network, channel, url) VALUES (?, ?, ?)", irc.network.name, target.lower(), url)
         
         irc_helpers.message(irc, target, "Subscribed %s to %s" % (target, feed.feed.title))
-
-def parse_html(html):
-    html = re.sub(r'(?i)</?b>', '~B', html)
-    html = re.sub(r'(?i)</?[ui]>', '~U', html)
-    html = re.sub(r'<img.*?src="(.+?)".*?>', r'\1', html)
-    html = re.sub(r'<.*?>', '', html)
-    return html
 
 def poll():
     logger.debug("Starting RSS poll.")
@@ -64,9 +58,9 @@ def poll():
                 
             logger.info("New item from %s!" % url)
             
-            content = parse_html(latest.description)
+            content = m('irc_helpers').html_to_irc(latest.description)
             if len(content) > 400:
-                content = u"%s..." % content[0:397]
+                content = u"%s…" % content[0:397]
             
             irc = networks.networks[network]
             m('irc_helpers').message(irc, channel, u'~B[RSS]~B ~U%s – %s~U' % (feed.feed.title, feed.feed.link))
