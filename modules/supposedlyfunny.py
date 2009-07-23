@@ -63,6 +63,7 @@ def privmsg(irc, origin, args):
         try:
             handle = urllib2.urlopen('http://www.foon.co.uk/')
             data = handle.read()
+            handle.close()
             phrase = re.findall("<div id='subtitle'>(.+?)</div>", data, re.S)
             phrase = phrase[0]
             irch.message(irc,target,'~B[foon]~B ~U%s~U' % phrase)
