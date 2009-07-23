@@ -1,8 +1,8 @@
+# encoding=utf-8
 class PotentialInfiniteLoop(Exception): pass
 from xml.sax.saxutils import unescape
 import re
 
-# encoding=utf-8
 def format(msg):
     return msg.replace('~B', chr(2)).replace('~U', chr(31)).replace('~I', chr(22))
 

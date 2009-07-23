@@ -24,7 +24,10 @@ def connected(irc, origin, args):
     logger.info("Completed connecting to %s" % irc.network.server)
 
 def privmsg(irc, origin, args):
-    irc_helpers = m('irc_helpers')
+    try:
+        irc_helpers = m('irc_helpers')
+    except:
+        logger.warn("Couldn't load irc_helpers.")
     target = args[0]
     args = args[1].split(' ')
     if args[0] == "KB3" and len(args) >= 2:

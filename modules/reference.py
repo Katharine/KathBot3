@@ -1,12 +1,12 @@
 # encoding=utf-8
 import urllib2
-from urllib import quote as escapeurl
 import re
 from xml.sax.saxutils import escape, unescape
 import random
 import textwrap
+import simplejson as json
 
-COMMANDS = frozenset(('google', 'wikipedia', 'wiki',))
+COMMANDS = frozenset(('google', 'wikipedia', 'wiki', 'define', 'translate',))
 
 # Various UAs from Safari's Develop menu.
 USER_AGENTS = (
@@ -22,10 +22,26 @@ USER_AGENTS = (
 )
 
 def load_url(url):
-    handle = urllib2.urlopen(urllib2.Request(url, headers={'User-Agent': random.choice(USER_AGENTS)}))
+    handle = urllib2.urlopen(urllib2.Request(url, headers={'User-Agent': random.choice(USER_AGENTS), 'Referrer': 'http://kathar.in'}))
     data = handle.read().decode('utf-8')
     handle.close()
     return data
+
+# Because urllib's doesn't like multibyte unicode.
+def escapeurl(url):
+    safe = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-'
+    output = ''
+    for char in url:
+        if char in safe:
+            output += char
+        else:
+            code = hex(ord(char))[2:]
+            while len(code) > 0:
+                if len(code) == 1:
+                    code = '0' + code
+                output += '%' + code[0:2]
+                code = code[2:]
+    return output
 
 def init():
     add_hook('privmsg', privmsg)
@@ -85,3 +101,29 @@ def privmsg(irc, origin, args):
             irch.message(irc, target, "~URedirected to %s~U" % redir, tag='Wikipedia')
         irch.message(irc, target, '\n'.join(textwrap.wrap(summary, 400)), tag='Wikipedia')
         irch.message(irc, target, 'Please see %s for more.' % url, tag='Wikipedia')
+    elif command == 'define':
+        search = ' '.join(args)
+        try:
+            data = load_url('http://dictionary.reference.com/browse/%s' % escapeurl(search))
+        except:
+            irch.message(irc, target, "There was an error loading the entry.")
+            return
+        matches = re.search('<h2 class="me">(.+?)</h2>.*?<span class="pron">(.+?)</span>.*?<span class="pg">(.+?)</span>.*?<td>(.+?)</td>', data)
+        irch.message(irc, target, '~U~B%s (%s)~B~U' % (matches.group(1), matches.group(3).strip(u'– ,')), tag='Define')
+        pron = matches.group(2)
+        pron = re.sub('<span class="boldface">(.+?)</span>', r'<b>\1</b>', pron)
+        pron = re.sub('<span class="ital-inline">(.+?)</span>', r'<i>\1</i>', pron)
+        pron = pron.replace('png', 'gif')
+        pron = format(pron)
+        irch.message(irc, target, 'Pronunciation: %s' % pron, tag='Define')
+        irch.message(irc, target, format(matches.group(4).strip()), tag='Define')
+    elif command == 'translate':
+        string = ' '.join(args)
+        try:
+            data = load_url('http://ajax.googleapis.com/ajax/services/language/translate?v=1.0&q=%s&langpair=%%7Cen' % escapeurl(string))
+        except urllib2.HTTPError:
+            irch.message(irc, target, "Translation failed.")
+            return
+        logger.debug(data)
+        parsed = json.loads(data)
+        irch.message(irc, target, format(parsed['responseData']['translatedText']), tag='Translation')

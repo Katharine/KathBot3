@@ -1,6 +1,7 @@
 import sys
 import logging
 import traceback
+import threading
 
 class ModuleAlreadyLoaded(Exception): pass
 class ModuleNotLoaded(ImportError): pass
@@ -20,14 +21,25 @@ def remove_hook(module, hook):
 
 def call_hook(hook, *args, **kwds):
     if hooks.get(hook):
+        RunHook(hook, *args, **kwds)
+
+class RunHook(threading.Thread):
+    def __init__(self, hook, *args, **kwds):
+        threading.Thread.__init__(self, name=hook)
+        self.hook = hook
+        self.args = args
+        self.kwds = kwds
+        self.start()
+    
+    def run(self):
         try:
-            for module in hooks[hook]:
+            for module in hooks[self.hook]:
                 try:
-                    hooks[hook][module](*args, **kwds)
+                    hooks[self.hook][module](*self.args, **self.kwds)
                 except Exception, message:
-                   logging.error("Error calling hook %s on %s: %s" % (hook, module, traceback.format_exc()))
+                   logging.error("Error calling hook %s on %s: %s" % (self.hook, module, traceback.format_exc()))
         except RuntimeError, message:
-            logging.warn("Aborted hook %s due to looping failure: %s" % (hook, message))
+            logging.warn("Aborted hook %s due to looping failure: %s" % (self.hook, message))
 
 def get_module(module_name):
     module = mods.get(module_name)
