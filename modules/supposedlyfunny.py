@@ -9,13 +9,12 @@ import random
 COMMANDS = frozenset(('fml', 'bash', 'foon'))
 
 def init():
-    add_hook('privmsg', privmsg)
+    add_hook('message', message)
 
-def privmsg(irc, origin, args):
-    irch = m('irc_helpers')
-    target, command, args = irch.parse(args)
+def message(irc, channel, origin, command, args):
     if command not in COMMANDS:
         return
+    irch = m('irc_helpers')
     if command == 'fml':
         url = 'http://api.betacie.com/view/random/nocomment?key=readonly&language=en'
         if len(args) == 1:
@@ -37,12 +36,12 @@ def privmsg(irc, origin, args):
             deserved = int(item.getElementsByTagName('deserved')[0].firstChild.data)
             #published = datetime.strptime(item.getElementsByTagName('date')[0].firstChild.data[:-6], '%Y-%m-%dT%H:%M:%S')
         except:
-            irch.message(irc, target, "Couldn't load item.")
+            irch.message(irc, channel, "Couldn't load item.")
             return
         
-        irch.message(irc, target, "~B[FML]~B ~UFML ~B#%s~B from ~B%s~B~U" % (fmlid, author))
-        irch.message(irc, target, "~B[FML]~B %s" % content)
-        irch.message(irc, target, "~B[FML]~B Agree: ~B%s~B | Disagree: ~B%s~B" % (format_number('%i', agree, True), format_number('%i', deserved, True)))
+        irch.message(irc, channel, "~B[FML]~B ~UFML ~B#%s~B from ~B%s~B~U" % (fmlid, author))
+        irch.message(irc, channel, "~B[FML]~B %s" % content)
+        irch.message(irc, channel, "~B[FML]~B Agree: ~B%s~B | Disagree: ~B%s~B" % (format_number('%i', agree, True), format_number('%i', deserved, True)))
     elif command == 'bash':
         # With thanks to Davy. <3
         try:
@@ -53,11 +52,11 @@ def privmsg(irc, origin, args):
             quote = random.choice(quotes)
             lines = unescape(quote[1].replace('<br />','')).split('\n')
         except urllib2.HTTPError:
-            irch.message(irc, target, "~B[bash]~B Couldn't find a quote. D:")
+            irch.message(irc, channel, "~B[bash]~B Couldn't find a quote. D:")
             return
-        irch.message(irc,target,'~B[bash]~B ~UFrom: http://www.bash.org/%s~U' % quote[0])
+        irch.message(irc,channel,'~B[bash]~B ~UFrom: http://www.bash.org/%s~U' % quote[0])
         for line in lines:
-            irch.message(irc,target,'~B[bash]~B %s' % line)
+            irch.message(irc, channel, '~B[bash]~B %s' % line)
     elif command == 'foon':
         # Davy here! O: 7-21-09
         try:
@@ -66,6 +65,6 @@ def privmsg(irc, origin, args):
             handle.close()
             phrase = re.findall("<div id='subtitle'>(.+?)</div>", data, re.S)
             phrase = phrase[0]
-            irch.message(irc,target,'~B[foon]~B ~U%s~U' % phrase)
+            irch.message(irc, channel, '~B[foon]~B ~U%s~U' % phrase)
         except urllib2.HTTPError:
-            irch.message(irc,target,'~B[foon]~B There was an error fetching a title message from foon.co.uk!')
+            irch.message(irc, channel, '~B[foon]~B There was an error fetching a title message from foon.co.uk!')

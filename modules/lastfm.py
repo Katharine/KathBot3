@@ -52,23 +52,22 @@ def init():
     poll.setDaemon(True)
     poll.start()
     
-    add_hook('privmsg', privmsg)
+    add_hook('message', message)
 
 def shutdown():
     poll.running = False
 
-def privmsg(irc, origin, args):
-    irc_helpers = m('irc_helpers')
-    target, command, args = irc_helpers.parse(args)
+def message(irc, channel, origin, command, args):
     if command == 'lastfm':
+        irc_helpers = m('irc_helpers')
         if len(args) != 1:
-            irc_helpers.message(irc, target, "You must state your last.fm username.")
+            irc_helpers.message(irc, channel, "You must state your last.fm username.")
             return
         lastfm = args[0]
         try:
             now_playing = poll.get_latest(lastfm)
         except:
-            irc_helpers.message(irc, target, "That username is invalid.")
+            irc_helpers.message(irc, channel, "That username is invalid.")
             return
         m('datastore').execute("REPLACE INTO lastfm (nick, lastfm) VALUES (?, ?)", origin.nick, lastfm)
-        irc_helpers.message(irc, target, "Set your last.fm username to %s (and you're currently listening to %s)" % (lastfm, now_playing[1]))
+        irc_helpers.message(irc, channel, "Set your last.fm username to %s (and you're currently listening to %s)" % (lastfm, now_playing[1]))

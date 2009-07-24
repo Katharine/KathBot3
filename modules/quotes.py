@@ -2,7 +2,7 @@
 import datetime
 
 def init():
-    add_hook('privmsg', privmsg)
+    add_hook('message', message)
     m('webserver').add_handler('GET', quotes_page)
 
 def shutdown():
@@ -33,15 +33,13 @@ def getquote(number=None, search=None):
     else:
         return Quote(number=results[0][0], quote=results[0][1], nick=results[0][2], added=results[0][3])
 
-def privmsg(irc, origin, args):
+def message(irc, channel, origin, command, args):
     irc_helpers = m('irc_helpers')
-    target, command, args = irc_helpers.parse(args)
-    
     if command == 'addquote':
         nick = origin.nick
         nick = m('security').get_canonical_nick(nick)
         addquote(origin.nick, ' '.join(args).replace("\\n", "\n"))
-        irc_helpers.message(irc, target, "Added quote from %s." % nick)
+        irc_helpers.message(irc, channel, "Added quote from %s." % nick)
     elif command == 'quote':
         number = None
         search = None
@@ -55,14 +53,14 @@ def privmsg(irc, origin, args):
         
         quote = getquote(search=search, number=number)
         if quote is None:
-            irc_helpers.message(irc, target, "No quotes found.")
+            irc_helpers.message(irc, channel, "No quotes found.")
         else:
-            irc_helpers.message(irc, target, "~B[Quote]~B ~UQuote #%s~U" % quote.number)
+            irc_helpers.message(irc, channel, "~B[Quote]~B ~UQuote #%s~U" % quote.number)
             lines = quote.quote.split("\n")
             for line in lines:
-                irc_helpers.message(irc, target, "~B[Quote]~B %s" % line)
+                irc_helpers.message(irc, channel, "~B[Quote]~B %s" % line)
                 
-            irc_helpers.message(irc, target, "~B[Quote]~B Added %s by %s." % (quote.format_added(), quote.nick))
+            irc_helpers.message(irc, channel, "~B[Quote]~B Added %s by %s." % (quote.format_added(), quote.nick))
 
 def quotes_page(request):
     logger.info("Returning main quote page.")

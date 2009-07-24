@@ -1367,7 +1367,7 @@ def process_machine_message(network, channel, message):
         return
     if z_machine.awaiting_input:
         z_machine.input_text = message.strip()
-        z_machine.input_wait.set()
+        z_machine.input_wait.setchannel
     else:
         logger.info("Z-Machine didn't want input.")
 
@@ -1395,25 +1395,23 @@ def launch_machine(irc, channel, story):
 
 def init():
     add_hook('privmsg', privmsg)
+    add_hook('message', message)
 
-def privmsg(irc, origin, args):
-    irc_helpers = m('irc_helpers')
-    message = args[1]
-    target = args[0]
-    foo, command, args = irc_helpers.parse(args)
-    if command is None:
-        if message[0] == '>':
-            process_machine_message(irc.network.name, target, message[1:].strip())
-        return
+def message(irc, channel, origin, command, args):
     if command == 'zdo':
         message = ' '.join(args)
-        process_machine_message(irc.network.name, target, message)
+        process_machine_message(irc.network.name, channel, message)
     elif command == 'zload':
         try:
-            terminate_machine(irc.network.name, target)
-            launch_machine(irc, target, args[0])
+            terminate_machine(irc.network.name, channel)
+            launch_machine(irc, channel, args[0])
         except Exception, message:
-            irc_helpers.message(irc, target, "Error launching Z-Machine: %s" % message)
+            m('irc_helpers').message(irc, channel, "Error launching Z-Machine: %s" % message)
+
+def privmsg(irc, origin, args):
+    if args[1][0] == '>':
+        process_machine_message(irc.network.name, args[0], args[1][1:].strip())
+    
         
 
 def shutdown():

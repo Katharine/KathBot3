@@ -28,10 +28,8 @@ def pisg(network, channel, irc=None):
     thread.start()
 
 def init():
-    add_hook('privmsg', privmsg)
+    add_hook('message', message)
 
-def privmsg(irc, origin, args):
-    irc_helpers = m('irc_helpers')
-    target, command, args = irc_helpers.parse(args)
+def message(irc, channel, origin, command, args):
     if command == 'stats':
-        pisg(irc.network.name, target, irc)
+        pisg(irc.network.name, channel, irc)

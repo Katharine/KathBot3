@@ -45,39 +45,38 @@ def escapeurl(url):
     return output
 
 def init():
-    add_hook('privmsg', privmsg)
+    add_hook('message', message)
 
-def privmsg(irc, origin, args):
-    irch = m('irc_helpers')
-    target, command, args = irch.parse(args)
+def message(irc, channel, origin, command, args):
     if command not in COMMANDS:
         return
+    irch = m('irc_helpers')
     format = irch.html_to_irc
     if command == 'google':
         if len(args) == 0:
-            irch.message(irc, target, "~B[Google]~B Please supply a search query.")
+            irch.message(irc, channel, "~B[Google]~B Please supply a search query.")
             return
         search = ' '.join(args)
         try:
             data = load_url('http://www.google.com/search?hl=en&q=%s&aq=f&oq=&aqi=g10' % escapeurl(search))
             result = re.search('<li class=g>.*?<a href="([^"]+?)"[^>]+?>(.+?)</a>.*?<div.*?>(.+?)<br' ,data, re.S)
             if result is not None:
-                irch.message(irc, target, "~U%s~U" % format(result.group(2)), tag='Google')
-                irch.message(irc, target, format(result.group(3)), tag='Google')
-                irch.message(irc, target, "URL: %s" % format(result.group(1)), tag='Google')
+                irch.message(irc, channel, "~U%s~U" % format(result.group(2)), tag='Google')
+                irch.message(irc, channel, format(result.group(3)), tag='Google')
+                irch.message(irc, channel, "URL: %s" % format(result.group(1)), tag='Google')
             else:
-                irch.message(irc, target, "No search results could be found.", tag='Google')
+                irch.message(irc, channel, "No search results could be found.", tag='Google')
         except urllib2.HTTPError:
-            irch.message(irc, target, "An error occurred and the search could not be completed.", tag='Google')
+            irch.message(irc, channel, "An error occurred and the search could not be completed.", tag='Google')
     elif command == 'wikipedia' or command == 'wiki':
         if len(args) == 0:
-            args = ['Special:Random']
+            args = 'Special:Random'
         page = ' '.join(args)
         url = 'http://en.wikipedia.org/wiki/%s' % escapeurl(page.replace(' ','_'))
         try:
             text = load_url(url)
         except urllib2.HTTPError:
-            irch.message(irc, target, '~B%s~B does not exist.' % page, tag='Wikipedia')
+            irch.message(irc, channel, '~B%s~B does not exist.' % page, tag='Wikipedia')
             return
         title = re.search('<title>(.+?) - Wikipedia, the free encyclopedia</title>', text).group(1)
         if page.lower() != title.lower():
@@ -88,7 +87,7 @@ def privmsg(irc, origin, args):
         old_text = text
         while '</table>' in old_text and old_text.find('</table>') < old_text.find('<p>'):
             old_text = text
-            text = text[text.find('</table')+8:]
+            text = textchannel
         text = old_text
         del old_text
         text = re.sub('(?is)<div class=.+?>.+?</div>', '', text)
@@ -99,48 +98,48 @@ def privmsg(irc, origin, args):
         summary = format(re.sub('</?a.*?>', '<u>', summary.group(1)))
         summary = re.sub(r'(?is)\[(?:[0-9]+?|[a-z]+? needed)\]',  '', summary)
         if redir is not None:
-            irch.message(irc, target, "~URedirected to %s~U" % redir, tag='Wikipedia')
-        irch.message(irc, target, '\n'.join(textwrap.wrap(summary, 400)), tag='Wikipedia')
-        irch.message(irc, target, 'Please see %s for more.' % url, tag='Wikipedia')
+            irch.message(irc, channel, "~URedirected to %s~U" % redir, tag='Wikipedia')
+        irch.message(irc, channel, '\n'.join(textwrap.wrap(summary, 400)), tag='Wikipedia')
+        irch.message(irc, channel, 'Please see %s for more.' % url, tag='Wikipedia')
     elif command == 'define':
         search = ' '.join(args)
         try:
             data = load_url('http://dictionary.reference.com/browse/%s' % escapeurl(search))
         except:
-            irch.message(irc, target, "There was an error loading the entry.")
+            irch.message(irc, channel, "There was an error loading the entry.")
             return
         matches = re.search('<h2 class="me">(.+?)</h2>.*?<span class="pron">(.+?)</span>.*?<span class="pg">(.+?)</span>.*?<td>(.+?)</td>', data)
-        irch.message(irc, target, '~U~B%s (%s)~B~U' % (matches.group(1), matches.group(3).strip(u'– ,')), tag='Define')
+        irch.message(irc, channel, '~U~B%s (%s)~B~U' % (matches.group(1), matches.group(3).strip(u'– ,')), tag='Define')
         pron = matches.group(2)
         pron = re.sub('<span class="boldface">(.+?)</span>', r'<b>\1</b>', pron)
         pron = re.sub('<span class="ital-inline">(.+?)</span>', r'<i>\1</i>', pron)
         pron = pron.replace('png', 'gif')
         pron = format(pron)
-        irch.message(irc, target, 'Pronunciation: %s' % pron, tag='Define')
-        irch.message(irc, target, format(matches.group(4).strip()), tag='Define')
+        irch.message(irc, channel, 'Pronunciation: %s' % pron, tag='Define')
+        irch.message(irc, channel, format(matches.group(4).strip()), tag='Define')
     elif command == 'translate':
         string = ' '.join(args)
         try:
             data = load_url('http://ajax.googleapis.com/ajax/services/language/translate?v=1.0&q=%s&langpair=%%7Cen' % escapeurl(string))
         except urllib2.HTTPError:
-            irch.message(irc, target, "Translation failed.")
+            irch.message(irc, channel, "Translation failed.")
             return
         logger.debug(data)
         parsed = json.loads(data)
-        irch.message(irc, target, format(parsed['responseData']['translatedText']), tag='Translation')
+        irch.message(irc, channel, format(parsed['responseData']['translatedText']), tag='Translation')
     elif command == 'spell':
         word = ' '.join(args) # Eh.
         s = aspell.Speller('lang', 'en')
         if s.check(word):
-            irch.message(irc, target, "~B%s~B is spelt correctly. :D" % word)
+            irch.message(irc, channel, "~B%s~B is spelt correctly. :D" % word)
         else:
             suggestions = s.suggest(word)[:5]
             if not suggestions:
-                irch.message(irc, target, "~B%s~B is spelt incorrectly, and I have not the foggiest clue what you meant. :(" % word)
+                irch.message(irc, channel, "~B%s~B is spelt incorrectly, and I have not the foggiest clue what you meant. :(" % word)
             else:
                 last = suggestions.pop()
                 formatted = ', '.join(suggestions)
                 if formatted != '':
                     formatted += ' or '
                 formatted += last
-            irch.message(irc, target, "~B%s~B is spelt incorrectly. Did you mean one of %s?" % (word, formatted))
+            irch.message(irc, channel, "~B%s~B is spelt incorrectly. Did you mean one of %s?" % (word, formatted))

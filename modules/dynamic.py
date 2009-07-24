@@ -374,7 +374,7 @@ def format_source(node):
         return value
 
 def init():
-    add_hook('privmsg', privmsg)
+    add_hook('message', message)
     try:
         m('webserver').add_handler('GET', weblist)
     except ModuleNotLoaded:
@@ -386,65 +386,64 @@ def find_command(command):
         return None
     return result[0][0]
 
-def privmsg(irc, origin, args):
+def message(irc, channel, origin, command, args):
     irc_helpers = m('irc_helpers')
-    target, command, args = irc_helpers.parse(args)
     if command in ('add', 'delete', 'source', 'append', 'eval'):
         if not m('security').check_action_permissible(origin, "%s" % command):
             return
         
         if command == 'add':
             if len(args) < 2:
-                irc_helpers.message(irc, target, "You must provide a command name and something for it to do.")
+                irc_helpers.message(irc, channel, "You must provide a command name and something for it to do.")
             else:
                 c = args[0]
                 source = ' '.join(args[1:])
                 m('datastore').execute("REPLACE INTO dynamic (command, source) VALUES (?, ?)", c, source)
-                irc_helpers.message(irc, target, "Added command ~B%s~B." % args[0])
+                irc_helpers.message(irc, channel, "Added command ~B%s~B." % args[0])
         elif command == 'append':
             if len(args) < 2:
-                irc_helpers.message(irc, target, "You must provide a command name and something for it to do.")
+                irc_helpers.message(irc, channel, "You must provide a command name and something for it to do.")
             else:
                 c = args[0]
                 original = find_command(c)
                 if original is None:
-                    irc_helpers.message(irc, target, "That command doesn't exist yet.")
+                    irc_helpers.message(irc, channel, "That command doesn't exist yet.")
                     return
                 source = original + ' '.join(args[1:])
                 m('datastore').execute("UPDATE dynamic SET source = ? WHERE command = ?", source, c)
-                irc_helpers.message(irc, target, "Updated command ~B%s~B." % args[0])
+                irc_helpers.messagechannel
         elif command == 'delete':
             if len(args) != 1:
-                irc_helpers.message(irc, target, "You must specify what you want to delete.")
+                irc_helpers.message(irc, channel, "You must specify what you want to delete.")
             else:
                 m('datastore').execute("DELETE FROM dynamic WHERE command = ?", args[0])
-                irc_helpers.message(irc, target, "Deleted command ~B%s~B." % args[0])
+                irc_helpers.message(irc, channel, "Deleted command ~B%s~B." % args[0])
         elif command == 'source':
             if len(args) != 1:
-                irc_helpers.message(irc, target, "You must specify what you want the source for.")
+                irc_helpers.message(irc, channel, "You must specify what you want the source for.")
             else:
                 source = find_command(args[0])
                 if source is not None:
                     try:
                         source = format_source(parse_tree(source))
                     except ParseError, message:
-                        irc_helpers.message(irc, target, "~BParse error (%s); highlighting disabled.~B" % message)
+                        irc_helpers.message(irc, channel, "~BParse error (%s); highlighting disabled.~B" % message)
                     lines = textwrap.wrap(source, 480)
                     for line in lines:
-                        irc_helpers.message(irc, target, '~U%s~U: %s' % (args[0], line))
+                        irc_helpers.message(irc, channel, '~U%s~U: %s' % (args[0], line))
                 else:
-                    irc_helpers.message(irc, target, "The command ~B%s~B does not exist." % args[0])
+                    irc_helpers.message(irc, channel, "The command ~B%s~B does not exist." % args[0])
         elif command == 'eval':
-            irc_helpers.message(irc, target, parseline(irc, origin, args, target, ' '.join(args)))
+            irc_helpers.message(irc, channel, parseline(irc, origin, args, channel, ' '.join(args)))
     else:
         source = find_command(command)
         if source is not None:
             try:
-                lines = parseline(irc, origin, args, target, source).split(r"\n")
+                lines = parseline(irc, origin, args, channel, source).split(r"\n")
             except ParseError, message:
                 lines = [message]
             for line in lines:
-                irc_helpers.message(irc, target, line)
+                irc_helpers.message(irc, channel, line)
 
 def weblist(request):
     content = """

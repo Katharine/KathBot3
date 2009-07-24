@@ -2,6 +2,7 @@
 class PotentialInfiniteLoop(Exception): pass
 from htmlentitydefs import name2codepoint
 import re
+import modules
 
 def format(msg):
     return msg.replace('~B', chr(2)).replace('~U', chr(31)).replace('~I', chr(22))
@@ -92,3 +93,20 @@ def html_to_irc(html):
     # Deal with newlines
     irc = re.sub('\n+', '\n', irc)
     return irc
+
+# Be helpful and do decoding
+def init():
+    add_hook('privmsg', privmsg)
+
+def privmsg(irc, origin, args):
+    channel, command, args = parse(args)
+    if not command:
+        return
+    try:
+        permitted = m('security').check_action_permissible(origin, command)
+    except ModuleNotLoaded:
+        permitted = True
+    if permitted:
+        modules.call_hook('message', irc, channel, origin, command, args)
+    else:
+        message(irc, channel, "You do not have sufficient access to do this!")

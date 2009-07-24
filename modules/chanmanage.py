@@ -6,7 +6,7 @@ mutes = {}
 def init():
     add_hook('connected', connected)
     add_hook('join', join)
-    add_hook('privmsg', privmsg)
+    add_hook('message', message)
     
     channels = m('datastore').query("SELECT network, channel, automode FROM channels")
     for channel in channels:
@@ -16,23 +16,18 @@ def init():
             automode[channel[0].lower()][channel[1].lower()] = channel[2]
             logger.info("Set automode for %s to +%s" % (channel[1], channel[2]))
 
-def privmsg(irc, origin, args):
+def message(irc, channel, origin, command, args):
     irc_helpers = m('irc_helpers')
-    target, command, args = irc_helpers.parse(args)
-    if not command:
-        return
-    if not m('security').check_action_permissible(origin, command):
-        return
     if command == 'chanmode':
         modes = ''
         if len(args) >= 1:
             modes = args[0]
-        m('datastore').execute("UPDATE channels SET automode = ? WHERE network = ? AND channel = ?", modes, irc.network.name, target)
-        automode[irc.network.name.lower()][target.lower()] = modes
-        irc_helpers.message(irc, target, "Updated automode settings for %s" % target)
+        m('datastore').execute("UPDATE channels SET automode = ? WHERE network = ? AND channel = ?", modes, irc.network.name, channel)
+        automode[irc.network.name.lower()][channel.lower()] = modes
+        irc_helpers.message(irc, channel, "Updated automode settings for %s" % channel)
     elif command == 'addchan':
         if len(args) < 1:
-            irc_helpers.message(irc, target, "You need to specify a channel.")
+            irc_helpers.message(irc, channel, "You need to specify a channel.")
             return
         channel = args[0]
         key = None
@@ -40,15 +35,15 @@ def privmsg(irc, origin, args):
             key = args[1]
         irc_helpers.join(irc, channel, key)
         m('datastore').execute("INSERT INTO channels(channel, network, passkey) VALUES(?, ?, ?)", channel.lower(), irc.network.name, key)
-        irc_helpers.message(irc, target, "Joined %s." % channel)
+        irc_helpers.message(irc, channel, "Joined %s." % channel)
     elif command == 'automode':
         if len(args) < 1:
-            irc_helpers.message(irc, target, "You need to specify who you're changing modes for.")
+            irc_helpers.message(irc, channel, "You need to specify who you're changing modes for.")
             return
         nick = m('security').get_canonical_nick(args[0])
         uid = m('datastore').query("SELECT id FROM users WHERE nick = ?", nick)
         if len(uid) == 0:
-            irc_helpers.message(irc, target, "Only %s users can have modes." % irc.nick)
+            irc_helpers.message(irc, channel, "Only %s users can have modes." % irc.nick)
             return
         uid = uid[0][0]
         if len(args) > 1:
@@ -56,27 +51,27 @@ def privmsg(irc, origin, args):
         else:
             modes = None
         
-        m('datastore').execute("REPLACE INTO chanmanage_modes (channel, uid, modes) VALUES (?, ?, ?)", target.lower(), uid, modes)
-        irc.raw("MODE %s +%s %s" % (target, modes, (nick + " ") * len(modes)))
-        irc_helpers.message(irc, target, "Set mode ~B+%s~B for ~B%s~B in ~B%s~B." % (modes, nick, target))
+        m('datastore').execute("REPLACE INTO chanmanage_modes (channel, uid, modes) VALUES (?, ?, ?)", channel.lower(), uid, modes)
+        irc.raw("MODE %s +%s %s" % (channel, modes, (nick + " ") * len(modes)))
+        irc_helpers.message(irc, channel, "Set mode ~B+%s~B for ~B%s~B in ~B%s~B." % (modes, nick, channel))
     elif command == 'mute':
-        modes = automodes(irc.network.name, target)
+        modes = automodes(irc.network.name, channel)
         if modes == '':
-            irc_helpers.message(irc, target, "This channel has no automode, so muting makes no sense")
+            irc_helpers.message(irc, channel, "This channel has no automode, so muting makes no sense")
             return
         try:
             nick = args[0]
             period = int(args[1])
         except:
-            irc_helpers.message(irc, target, "Usage: mute [nick] [time]")
+            irc_helpers.message(irc, channel, "Usage: mute [nick] [time]")
             return
-        key = '%s/%s' % (irc.network, target)
+        key = '%s/%s' % (irc.network, channel)
         if key not in mutes:
             mutes[key] = set()
         mutes[key].add(nick.lower())
-        irc.raw("MODE %s -%s %s" % (target, modes, (nick + ' ') * len(modes)))
-        m('cron').add_at(time.time() + period * 60, unmute, irc, target, nick)
-        irc_helpers.message(irc, target, "Muted %s for %s minutes." % (nick, period))
+        irc.raw("MODE %s -%s %s" % (channel, modes, (nick + ' ') * len(modes)))
+        m('cron').add_at(time.time() + period * 60, unmute, irc, channel, nick)
+        irc_helpers.message(irc, channel, "Muted %s for %s minutes." % (nick, period))
 
 def connected(irc):
     channels = m('datastore').query("SELECT channel, passkey FROM channels WHERE network = ?", irc.network.name)

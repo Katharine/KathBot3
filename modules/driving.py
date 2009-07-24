@@ -5,26 +5,23 @@ import random
 current_question = {}
 
 def init():
-    add_hook('privmsg', privmsg)
+    add_hook('message', message)
 
-def privmsg(irc, origin, args):
-    irc_helpers = m('irc_helpers')
-    target, command, args = irc_helpers.parse(args)
-    if not command:
-        return
+def message(irc, channel, origin, command, args):
     if command == 'theory':
+        irc_helpers = m('irc_helpers')
         letters = 'ABCDEFGH'
-        key = '%s/%s' % (irc.network, target)
+        key = '%s/%s' % (irc.network, channel)
         if len(args) == 0:
             question = get_question()
-            irc_helpers.message(irc, target, '~B[Theory] %s' % question.text)
-            irc_helpers.message(irc, target, '~B[Theory]~B (%s)' % question.prompt)
+            irc_helpers.message(irc, channel, '~B[Theory] %s' % question.text)
+            irc_helpers.message(irc, channel, '~B[Theory]~B (%s)' % question.prompt)
             for i in range(0, len(question.options)):
-                irc_helpers.message(irc, target, '~B[Theory]~B %s: ~U%s~U' % (letters[i], question.options[i].text))
+                irc_helpers.message(irc, channel, '~B[Theory]~B %s: ~U%s~U' % (letters[i], question.options[i].text))
             current_question[key] = question
         else:
             if key not in current_question:
-                irc_helpers.message(irc, target, "You can't answer a question until one has been asked.")
+                irc_helpers.message(irc, channel, "You can't answer a question until one has been asked.")
             else:
                 answers = [x.upper().strip() for x in ' '.join(args).split(',')]
                 answers.sort()
@@ -35,10 +32,10 @@ def privmsg(irc, origin, args):
                     if option.correct:
                         expected.append(letters[i])
                 if answers == expected:
-                    irc_helpers.message(irc, target, "~B[Theory] Correct! :D~B")
+                    irc_helpers.message(irc, channel, "~B[Theory] Correct! :D~B")
                 else:
-                    irc_helpers.message(irc, target, "~B[Theory] Incorrect. The correct answer was %s" % ', '.join(expected))
-                irc_helpers.message(irc, target, "~B[Theory]~B %s" % question.explanation)
+                    irc_helpers.message(irc, channel, "~B[Theory] Incorrect. The correct answer was %s" % ', '.join(expected))
+                irc_helpers.message(irc, channel, "~B[Theory]~B %s" % question.explanation)
                 del current_question[key]
                 
 

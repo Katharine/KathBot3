@@ -10,29 +10,28 @@ POLL_INTERVAL = 300
 
 def init():
     feedparser.USER_AGENT = 'KathBot/3'
-    add_hook('privmsg', privmsg)
+    add_hook('message', message)
     m('cron').add_cron(POLL_INTERVAL, poll)
     logger.info("Registered cron job every %s seconds." % POLL_INTERVAL)
 
-def privmsg(irc, origin, args):
-    irc_helpers = m('irc_helpers')
-    target, command, args = irc_helpers.parse(args)
+def message(irc, channel, origin, command, args):
     if command == 'subscribe':
+        irc_helpers = m('irc_helpers')
         if len(args) != 1:
-            irc_helpers.message(irc, target, "You must specify a URL to subscribe to.")
+            irc_helpers.message(irc, channel, "You must specify a URL to subscribe to.")
             return
         url = args[0]
         feed = feedparser.parse(url)
         if feed.status < 200 or feed.status >= 300:
-            irc_helpers.message(irc, target, "No feed found at %s" % url)
+            irc_helpers.message(irc, channel, "No feed found at %s" % url)
             return
         
         if len(feed.entries) == 0:
-            irc_helpers.message(irc, target, "The specified feed is empty.")
+            irc_helpers.message(irc, channel, "The specified feed is empty.")
         
-        m('datastore').execute("INSERT INTO rss_subscriptions(network, channel, url) VALUES (?, ?, ?)", irc.network.name, target.lower(), url)
+        m('datastore').execute("INSERT INTO rss_subscriptions(network, channel, url) VALUES (?, ?, ?)", irc.network.name, channel.lower(), url)
         
-        irc_helpers.message(irc, target, "Subscribed %s to %s" % (target, feed.feed.title))
+        irc_helpers.message(irc, channel, "Subscribed %s to %s" % (target, feed.feed.title))
 
 def poll():
     logger.debug("Starting RSS poll.")
