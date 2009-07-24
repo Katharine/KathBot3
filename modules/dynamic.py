@@ -84,6 +84,8 @@ def parse_tree(line):
                 if node.closing:
                     if node.name == current_node.name:
                         current_node = current_node.parent
+                    elif node.name == 'if' and current_node.name == 'else' and current_node.parent and current_node.parent.name == 'if':
+                        current_node = current_node.parent.parent
                     else:
                         raise ParseError, "Mismatched closing [/%s]; expecting [/%s]." % (node.name, current_node.name)
                 else:
@@ -387,7 +389,7 @@ def find_command(command):
 def privmsg(irc, origin, args):
     irc_helpers = m('irc_helpers')
     target, command, args = irc_helpers.parse(args)
-    if command in ('add', 'delete', 'source', 'append'):
+    if command in ('add', 'delete', 'source', 'append', 'eval'):
         if not m('security').check_action_permissible(origin, "%s" % command):
             return
         
@@ -432,6 +434,8 @@ def privmsg(irc, origin, args):
                         irc_helpers.message(irc, target, '~U%s~U: %s' % (args[0], line))
                 else:
                     irc_helpers.message(irc, target, "The command ~B%s~B does not exist." % args[0])
+        elif command == 'eval':
+            irc_helpers.message(irc, target, parseline(irc, origin, args, target, ' '.join(args)))
     else:
         source = find_command(command)
         if source is not None:

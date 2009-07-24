@@ -90,7 +90,7 @@ class IRC(threading.Thread):
             data = (buff + data).split("\n")
             buff = data.pop()
             for line in data:
-                line = line.strip()
+                line = line.strip().decode('utf-8')
                 logging.debug("<-%s\t%s" % (self.network, line))
                 self.handle(line)
 

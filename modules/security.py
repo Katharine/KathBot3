@@ -13,9 +13,19 @@ def privmsg(irc, origin, args):
         return
     
     if command == 'access':
-        canon = get_canonical_nick(origin.nick)
-        access = get_user_access(origin)
-        m('irc_helpers').message(irc, target, "Access for %s (%s) is level %s" % (canon, origin, access))
+        if len(args) > 0:
+            nick = args[0]
+            try:
+                user = m('chantrack').network(irc)[target.lower()].users[nick.lower()]
+            except:
+                irc_helpers.message(irc, target, "I don't know %s's host!" % nick)
+                return
+        else:
+            nick = origin.nick
+            user = origin
+        canon = get_canonical_nick(nick)
+        access = get_user_access(user)
+        m('irc_helpers').message(irc, target, "Access for %s (%s!%s@%s) is level %s" % (canon, user.nick, user.ident, user.hostname, access))
     elif command == 'adduser':
         nick = args[0]
         level = int(args[1])

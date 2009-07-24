@@ -1,5 +1,6 @@
 from datetime import datetime
 import modules
+import networks
 
 channels = {}
 
@@ -8,10 +9,41 @@ def init():
     add_hook('332', initial_topic)
     add_hook('topic', topic)
     add_hook('353', userlist)
+    add_hook('319', channel_list)
+    add_hook('302', userhosts)
     add_hook('part', part)
     add_hook('kick', kick)
     add_hook('quit', quit)
     add_hook('nick', nick)
+    
+    for network in networks.networks:
+        irc = networks.networks[network]
+        if irc.connected:
+            irc.raw("WHOIS %s" % irc.nick)
+
+def channel_list(irc, origin, args):
+    if args[1] == irc.nick:
+        channels = [x.lstrip('@+') for x in args[2].split(' ')]
+        for channel in channels:
+            irc.raw("NAMES %s" % channel)
+
+def userhosts(irc, origin, args):
+    data = args[1].split(' ')
+    for datum in data:
+        datum = datum.split('=', 1)
+        nick = datum[0].rstrip('*')
+        hostmask = datum[1].lstrip('+-').split('@', 1)
+        ident = hostmask[0]
+        host = hostmask[1]
+        channels = nick_channels(irc, nick)
+        if channels:
+            logger.info("Updated ident/host for %s" % nick)
+            for channame in channels:
+                channel = network(irc)[channame]
+                user = channel.users[nick.lower()]
+                user.ident = ident
+                user.hostname = host
+            
 
 def network(irc):
     if not channels.get(irc.network.name):
@@ -42,12 +74,25 @@ def topic(irc, origin, args):
 
 def userlist(irc, origin, args):
     channel_name = args[2].lower()
+    if channel_name not in network(irc):
+        network(irc)[channel_name] = Channel(name=args[2])
     channel = network(irc)[channel_name]
     nicks = args[3].split(' ')
+    lookup = []
     for nick in nicks:
         nick = nick.lstrip('+%@~&^!')
-        channel.users[nick.lower()] = nick
+        existing = nick_channels(irc, nick)
+        user = User(nick=nick)
+        if existing:
+            existing = network(irc)[existing[0]].users[nick.lower()]
+            user.ident = existing.ident
+            user.hostname = existing.hostname
+        else:
+            lookup.append(nick)
+        channel.users[nick.lower()] = user
         logger.info("Added nick %s to %s/%s" % (nick, irc.network, channel))
+    if lookup:
+        irc.raw("USERHOST %s" % ' '.join(lookup))
 
 def part(irc, origin, args):
     channel = args[0].lower()
@@ -88,7 +133,8 @@ def nick(irc, origin, args):
         for channel_name in network(irc):
             channel = network(irc)[channel_name]
             if channel.users.get(origin.nick.lower()):
-                channel.users[newnick.lower()] = newnick
+                channel.users[newnick.lower()] = channel.users[origin.nick.lower()]
+                channel.users[newnick.lower()].nick = newnick
                 del channel.users[origin.nick.lower()]
                 logger.info("Renamed %s to %s in %s/%s" % (origin.nick, newnick, irc.network, channel))
 
@@ -103,7 +149,7 @@ def nick_channels(irc, nick):
     
     return channels
 
-class Channel:
+class Channel(object):
     users = None
     topic = ''
     joined = None
@@ -117,3 +163,18 @@ class Channel:
         
     def __str__(self):
         return self.name
+
+class User(object):
+    nick = ''
+    hostname = ''
+    modes = ''
+    ident = ''
+    
+    def __init__(self, nick='', hostname='', modes='', ident=''):
+        self.nick = nick
+        self.hostname = hostname
+        self.modes = modes
+        self.ident = ident
+    
+    def __str__(self):
+        return '%s!%s@%s' % (self.nick, self.ident, self.hostname)
