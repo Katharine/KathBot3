@@ -90,7 +90,11 @@ class IRC(threading.Thread):
             data = (buff + data).split("\n")
             buff = data.pop()
             for line in data:
-                line = line.strip().decode('utf-8')
+                line = line.strip()
+                try:
+                    line = line.decode('utf-8')
+                except UnicodeDecodeError, e:
+                    logging.warn("Failed to decode incoming UTF-8: %s" % e)
                 logging.debug("<-%s\t%s" % (self.network, line))
                 self.handle(line)
 

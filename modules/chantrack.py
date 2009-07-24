@@ -54,12 +54,15 @@ def join(irc, origin, args):
     channel = args[0].lower()
     if origin.nick == irc.nick:
         network(irc)[channel] = Channel(name=channel)
-        network(irc)[channel].users[origin.nick.lower()] = origin.nick
         logger.info("Added channel %s/%s" % (irc.network, channel))
         modules.call_hook('joined', irc, channel)
     else:
-        network(irc)[channel].users[origin.nick.lower()] = origin.nick
         logger.info("Added nick %s to %s/%s" % (origin.nick, irc.network, channel))
+    user = create_user(irc, origin.nick)
+    network(irc)[channel].users[origin.nick.lower()] = user
+    if not user.hostname:
+        irc.raw("USERHOST %s" % origin.nick)
+    
 
 def initial_topic(irc, origin, args):
     channel = args[1].lower()
@@ -81,15 +84,10 @@ def userlist(irc, origin, args):
     lookup = []
     for nick in nicks:
         nick = nick.lstrip('+%@~&^!')
-        existing = nick_channels(irc, nick)
-        user = User(nick=nick)
-        if existing:
-            existing = network(irc)[existing[0]].users[nick.lower()]
-            user.ident = existing.ident
-            user.hostname = existing.hostname
-        else:
-            lookup.append(nick)
+        user = create_user(irc, nick)
         channel.users[nick.lower()] = user
+        if not user.hostname:
+            lookup.append(nick)
         logger.info("Added nick %s to %s/%s" % (nick, irc.network, channel))
     if lookup:
         irc.raw("USERHOST %s" % ' '.join(lookup))
@@ -148,6 +146,15 @@ def nick_channels(irc, nick):
             channels.append(channel_name)
     
     return channels
+
+def create_user(irc, nick):
+    existing = nick_channels(irc, nick)
+    user = User(nick=nick)
+    if existing:
+        existing = network(irc)[existing[0]].users[nick.lower()]
+        user.ident = existing.ident
+        user.hostname = existing.hostname
+    return user
 
 class Channel(object):
     users = None
