@@ -63,10 +63,10 @@ def poll():
                 content = u"%s…" % content[0:397]
             
             irc = networks.networks[network]
-            m('irc_helpers').message(irc, channel, u'~B[RSS]~B ~U%s – %s~U' % (feed.feed.title, feed.feed.link))
-            m('irc_helpers').message(irc, channel, '~B[RSS] %s~B' % latest.title)
-            m('irc_helpers').message(irc, channel, '~B[RSS]~B %s' % content)
-            m('irc_helpers').message(irc, channel, '~B[RSS]~B More: %s' % latest.link)
+            m('irc_helpers').message(irc, channel, u'~U%s – %s~U' % (feed.feed.title, feed.feed.link), tag='RSS')
+            m('irc_helpers').message(irc, channel, '~B%s~B' % latest.title, tag='RSS')
+            m('irc_helpers').message(irc, channel, content, tag='RSS')
+            m('irc_helpers').message(irc, channel, 'More: %s' % latest.link, tag='RSS')
             etag = feed.get('etag', '')
             modified = None
             if 'modified' in feed:

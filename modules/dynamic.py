@@ -472,6 +472,10 @@ def timediff(delta):
     seconds = delta.days * 86400 + delta.seconds
     if seconds < 0:
         return 'in the past'
+    years = seconds // 31557600
+    seconds -= years * 31557600
+    months = seconds // 2629800
+    seconds -= months * 2629800
     weeks = seconds // (86400 * 7)
     seconds -= weeks * 86400 * 7
     days = seconds // 86400
@@ -482,6 +486,10 @@ def timediff(delta):
     seconds = seconds % 60
     
     parts = []
+    if years > 0:
+        parts.append("%s year%s" % (years, 's' if years > 1 else ''))
+    if months > 0:
+        parts.append("%s month%s" % (months, 's' if months > 1 else ''))
     if weeks > 0:
         parts.append('%s week%s' % (weeks, 's' if weeks > 1 else ''))
     if days > 0:

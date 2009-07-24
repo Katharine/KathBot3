@@ -5,8 +5,9 @@ from xml.sax.saxutils import escape, unescape
 import random
 import textwrap
 import simplejson as json
+import aspell
 
-COMMANDS = frozenset(('google', 'wikipedia', 'wiki', 'define', 'translate',))
+COMMANDS = frozenset(('google', 'wikipedia', 'wiki', 'define', 'translate', 'spell',))
 
 # Various UAs from Safari's Develop menu.
 USER_AGENTS = (
@@ -127,3 +128,19 @@ def privmsg(irc, origin, args):
         logger.debug(data)
         parsed = json.loads(data)
         irch.message(irc, target, format(parsed['responseData']['translatedText']), tag='Translation')
+    elif command == 'spell':
+        word = ' '.join(args) # Eh.
+        s = aspell.Speller('lang', 'en')
+        if s.check(word):
+            irch.message(irc, target, "~B%s~B is spelt correctly. :D" % word)
+        else:
+            suggestions = s.suggest(word)[:5]
+            if not suggestions:
+                irch.message(irc, target, "~B%s~B is spelt incorrectly, and I have not the foggiest clue what you meant. :(" % word)
+            else:
+                last = suggestions.pop()
+                formatted = ', '.join(suggestions)
+                if formatted != '':
+                    formatted += ' or '
+                formatted += last
+            irch.message(irc, target, "~B%s~B is spelt incorrectly. Did you mean one of %s?" % (word, formatted))

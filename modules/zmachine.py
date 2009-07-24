@@ -16,14 +16,13 @@ class QuetzalError(Exception): pass
 OPCODE_FORMAT_SHORT = 1
 OPCODE_FORMAT_LONG = 2
 OPCODE_FORMAT_VARIABLE = 3
-OPCODE_FORMAT_EXTENDED = 4
 
 OPERAND_TYPE_SMALL = 1
 OPERAND_TYPE_LARGE = 0
 OPERAND_TYPE_VAR = 2
 OPERAND_TYPE_OMITTED = 3
 
-STORY_MAX_SIZE = 262144
+STORY_MAX_SIZE = 131072
 
 COMPRESS_SAVE_FILES = True
 
@@ -53,30 +52,11 @@ EXTRA_CHARACTERS = (
     'Œ', '¡', '¿',
 )
 
-TEXT_STYLE_ROMAN = 0
-TEXT_STYLE_REVERSE_VIDEO = 1
-TEXT_STYLE_BOLD = 2
-TEXT_STYLE_ITALIC = 4
-TEXT_STYLE_FIXED_PITCH = 8
-
-COLOUR_MAPPINGS = {
-    2: '01',
-    3: '04',
-    4: '09',
-    5: '08',
-    6: '12',
-    7: '13',
-    8: '11',
-    9: '00',
-    10: '14',
-}
-
 class ZMachine(threading.Thread):
-    # IRC/output management
+    # IRC management
     irc = None
     channel = None
     output_buffer = ''
-    text_style = TEXT_STYLE_ROMAN
     
     # Thread management
     awaiting_input = False
@@ -117,16 +97,6 @@ class ZMachine(threading.Thread):
     inputs_requested = 0
     lines_output = 0
     
-    # Output streams
-    stream_1 = True # Screen
-    stream_2 = False # Transcript
-    stream_3 = [] # Tables in memory (can be nested)
-    stream_4 = False # Player script file
-    
-    # Colours (changing these will change the defaults)
-    colour_fg = 2
-    colour_bg = 9
-    
     # Z-Char parsing
     a0 = 'abcdefghijklmnopqrstuvwxyz'
     a1 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -139,7 +109,6 @@ class ZMachine(threading.Thread):
         if not os.path.isfile(self.story):
           raise IOError, "%s does not exist!" % story
         threading.Thread.__init__(self, name="%s/%s/%s" % (irc.network.name, channel, story))
-        self.setDaemon(True)
         
     def run(self):
         self.load_story()
@@ -159,7 +128,7 @@ class ZMachine(threading.Thread):
     
     def complete_vm_setup(self):        
         self.version = self.memory[0x00]
-        if self.version > 5:
+        if self.version > 3:
             raise StoryError, "Unsupported version"
         
         self.memory_high_end = len(self.memory) - 1
@@ -197,21 +166,6 @@ class ZMachine(threading.Thread):
         if self.version != 1:
             self.a2 = " \n0123456789.,!?_#'\"/\\-:()"
         
-        # Set up colours
-        self.memory[0x01] |= 0x01
-        self.memory[0x2C] = self.colour_bg
-        self.memory[0x2D] = self.colour_fg
-        
-        # Note what we can't do (sound, pictures, undo, mouse, menus)
-        self.memory[0x10] &= ~0xDC # ~11011100
-        
-        # Set up screen size. We call it 100 wide for no particular reason.
-        self.memory[0x20] = 255 # Infinite height.
-        self.memory[0x21] = 100
-        if self.version >= 5:
-            self.set_number(0x22, self.memory[0x20])
-            self.set_number(0x24, self.memory[0x21])
-        
         logger.info("Loaded version %s story file from %s" % (self.version, self.story))
         logger.info("dynamic_end: %s, static_end: %s, high_start: %s" % (self.memory_dynamic_end, self.memory_static_end, self.memory_high_start))
         logger.info("dictionary_start: %s, dictionary_entry_length: %s, object_table_start: %s global_variable_start: %s, abbrevation_start: %s" % (
@@ -237,6 +191,8 @@ class ZMachine(threading.Thread):
 
     # Useful utility functions
     def unsigned_number(self, address):
+        if address > self.memory_high_end - 1:
+            raise StoryError, "Attempt to retrieve data from past the end of high memory"
         top = self.memory[address] << 8
         bottom = self.memory[address + 1]
         return top | bottom
@@ -256,12 +212,7 @@ class ZMachine(threading.Thread):
         self.memory[address + 1] = low
         
     def unpack_address(self, address):
-        if self.version <= 3:
-            return 2 * address
-        elif self.version <= 7:
-            return 4 * address
-        elif self.version == 8:
-            return 8 * address
+        return 2 * address
     
     def z_string(self, address, word_address=False):
         string = []
@@ -344,22 +295,6 @@ class ZMachine(threading.Thread):
                 ascii += "\n"
         return ascii
     
-    def ascii_to_zscii(self, ascii):
-        zscii = []
-        for char in ascii:
-            o = ord(char)
-            if o >= 32 and o <= 126:
-                zscii.append(o)
-            elif char == "\n":
-                zscii.append(10)
-            elif char == "\r":
-                pass
-            elif char in EXTRA_CHARACTERS:
-                zscii += list(EXTRA_CHARACTERS).index(char)
-            else:
-                zscii.append(ord("?"))
-        return zscii
-    
     def zscii_to_zchar(self, zscii, bytes):
         zchars = []
         zchar_limit = bytes / 2 * 3
@@ -405,38 +340,17 @@ class ZMachine(threading.Thread):
         
         return words
         
-    def locate_string_in_dictionary(self, zstring, dictionary=0):
-        alphabetical = True
-        if dictionary == 0:
-            dictionary = self.dictionary_start
-            k = self.dictionary_entry_length
-            dictionary_length = self.dictionary_length
-        else:
-            n = dictionary + self.memory[dictionary] + 1
-            k = self.memory[n]
-            dictionary_length = self.unsigned_number(n + 1)
-            if dictionary_length < 0:
-                alphabetical = False
-                dictionary_length *= -1
-        
-        if self.version < 4:
-            encoded_length = 4
-        else:
-            encoded_length = 6
-        start = dictionary + self.memory[dictionary] + 4
-        for i in range(0, dictionary_length):
-            if list(self.memory[start + i*k:start + i*k + encoded_length]) == zstring:
+    def locate_string_in_dictionary(self, zstring):
+        start = self.dictionary_start + self.memory[self.dictionary_start] + 4
+        k = self.dictionary_entry_length
+        for i in range(0, self.dictionary_length):
+            if list(self.memory[start + i*k:start + i*k + 4]) == zstring:
                 return start + i*k
-            elif alphabetical and self.memory[start + i*k] > zstring[0]:
+            elif self.memory[start + i*k] > zstring[0]:
                 return 0
         return 0
     
-    def tokenise_zscii(self, table_address, zscii, dictionary=0, leave_unknowns=False):
-        if dictionary == 0:
-            word_separators = self.word_separators
-        else:
-            n = self.memory[dictionary] + dictionary + 1
-            word_separators = self.memory[dictionary + 1:n]
+    def tokenise_zscii(self, table_address, zscii):
         words = []
         next_word = []
         last_new_word = 0
@@ -464,28 +378,21 @@ class ZMachine(threading.Thread):
                 break
             word_data = words[i]
             word = word_data[1]
-            zstring = self.zscii_to_zchar(word, 4 if self.version < 4 else 6)
-            pos = self.locate_string_in_dictionary(zstring, dictionary=dictionary)
-            if pos == 0 and leave_unknowns:
-                continue
+            zstring = self.zscii_to_zchar(word, 4)
+            pos = self.locate_string_in_dictionary(zstring)
             self.set_number(table_address + i*4 + 2, pos)
             self.memory[table_address + i*4 + 4] = len(word)
             self.memory[table_address + i*4 + 5] = word_data[0] + 1
     
     def execute_cycle(self):
         opcode = self.memory[self.pc]
+        to_increment = 1
         format = 0
         operand_count = -1
         operand_types = []
         really_variable = False
         
-        
-        if self.version >= 5 and opcode == 0xBE:
-            format = OPCODE_FORMAT_EXTENDED
-            really_variable = True
-            self.pc += 1
-            opcode = self.memory[self.pc]
-        elif (opcode & 0xC0) == 0xC0:
+        if (opcode & 0xC0) == 0xC0:
             format = OPCODE_FORMAT_VARIABLE
             if (opcode & 0x20) == 0:
                 operand_count = 2
@@ -516,33 +423,23 @@ class ZMachine(threading.Thread):
             if (opcode & 0x20) == 0x20:
                 operand_types[1] = OPERAND_TYPE_VAR
             opcode &= 0x1F
+            to_increment += 1
         
-        if format == OPCODE_FORMAT_VARIABLE or format == OPCODE_FORMAT_EXTENDED:
-            def figure_types(bits):
-                for i in range(0, 4):
-                    now = (bits >> (3 - i) * 2) & 0x03
-                    if now == OPERAND_TYPE_SMALL:
-                        operand_types.append(OPERAND_TYPE_SMALL)
-                    elif now == OPERAND_TYPE_LARGE:
-                        operand_types.append(OPERAND_TYPE_LARGE)
-                    elif now == OPERAND_TYPE_VAR:
-                        operand_types.append(OPERAND_TYPE_VAR)
-                    else:
-                        break
+        if format == OPCODE_FORMAT_VARIABLE:
+            to_increment += 1
             self.pc += 1
-            figure_types(self.memory[self.pc])
-            
-            # Because call_vn2 and call_vs2 are annoying special cases.
-            if format == OPCODE_FORMAT_VARIABLE and really_variable:
-                if opcode == 0xC or opcode == 0x1A:
-                    self.pc += 1
-                    figure_types(self.memory[self.pc])
-                    if not really_variable:
-                        operand_types = operand_types[0:2]
-            
+            bits = self.memory[self.pc]
+            for i in range(0, 4):
+                now = (bits >> (3 - i) * 2) & 0x03
+                if now == OPERAND_TYPE_SMALL:
+                    operand_types.append(OPERAND_TYPE_SMALL)
+                elif now == OPERAND_TYPE_LARGE:
+                    operand_types.append(OPERAND_TYPE_LARGE)
+                elif now == OPERAND_TYPE_VAR:
+                    operand_types.append(OPERAND_TYPE_VAR)
+                else:
+                    break
             operand_count = len(operand_types)
-            if format == OPCODE_FORMAT_VARIABLE and not really_variable:
-                operand_count = 2
         
         operands = []
         for operand_type in operand_types:
@@ -556,8 +453,6 @@ class ZMachine(threading.Thread):
         function_name = 'op_'
         if format == OPCODE_FORMAT_VARIABLE and really_variable:
             function_name += 'var'
-        elif format == OPCODE_FORMAT_EXTENDED:
-            function_name += 'ext'
         else:
             function_name += "%sop" % operand_count
         function_name += "_%s" % hex(opcode)[2:]
@@ -569,11 +464,9 @@ class ZMachine(threading.Thread):
                     operands[i] = self.get_variable(operands[i])
             
             try:
-                logger.debug("Calling %s%s" % (function_name, operands))
                 self.__getattribute__(function_name)(*operands)
             except StoryError, message:
                 self.report_error("Story error: %s" % message)
-                self.report_error(traceback.format_exc())
             except Exception, message:
                 self.report_error("Internal error: %s" % message)
                 self.report_error(traceback.format_exc())
@@ -618,15 +511,15 @@ class ZMachine(threading.Thread):
             self.stack[variable - 1] = value
     
     def get_object_address(self, obj):
-        if obj < 0 or (obj > 255 and self.version < 4) or (obj > 65536 and self.version >= 5):
+        if obj < 0 or obj > 255:
             raise StoryError, "Attempted to find invalid object %s" % obj
         if obj == 0:
             return 0
-        address = self.object_table_start + (62 if self.version < 4 else 126) + (obj - 1) * (9 if self.version < 4 else 14)
+        address = self.object_table_start + 62 + (obj - 1) * 9
         return address
     
     def get_object_attribute(self, obj, attribute):
-        if (attribute > 31 and self.version < 4) or (attribute > 47 and self.version >= 4):
+        if attribute > 31:
             raise StoryError, "Attempted to get invalid attribute %s" % obj
         if obj == 0:
             raise StoryError, "Attempted to read attribute from null object"
@@ -636,7 +529,7 @@ class ZMachine(threading.Thread):
         return bool(self.memory[address + part] & bits)
         
     def set_object_attribute(self, obj, attribute, value):
-        if (attribute > 31 and self.version < 4) or (attribute > 47 and self.version >= 4):
+        if attribute > 31:
             raise StoryError, "Attempted to set invalid attribute %s" % obj
         if obj == 0:
             raise StoryError, "Attempted to set attribute on null object"
@@ -652,7 +545,7 @@ class ZMachine(threading.Thread):
         if obj == 0:
             raise StoryError, "Attempted to read property table for null object"
         address = self.get_object_address(obj)
-        return self.unsigned_number(address + (7 if self.version < 4 else 12))
+        return self.unsigned_number(address + 7)
     
     def get_object_name(self, obj):
         if obj == 0:
@@ -663,150 +556,60 @@ class ZMachine(threading.Thread):
     def get_object_property_address(self, obj, prop):
         address = self.get_object_property_table_address(obj)
         address += self.memory[address]*2 + 1
-        if self.version < 4:
-            while self.memory[address] != 0:
-                property_number = self.memory[address] % 32
-                size = self.memory[address] // 32 + 1
-                if property_number == prop:
-                    return address + 1
-                elif property_number < prop:
-                    return 0
-                address += size + 1
-        else:
-            # I have no idea if this is the right loop condition.
-            # The Standard doesn't specify.
-            while self.memory[address] != 0:
-                property_number = self.memory[address] & 0x3F
-                bytes = 2 if (self.memory[address] & 0x80) else 1
-                if property_number == prop:
-                    return address + bytes
-                if bytes == 1:
-                    size = 1
-                else:
-                    size = self.memory[address + 1] & 0x3F
-                    if size == 0:
-                        size = 64
-                address += size + bytes
+        while self.memory[address] != 0:
+            property_number = self.memory[address] % 32
+            size = self.memory[address] // 32 + 1
+            if property_number == prop:
+                return address + 1
+            elif property_number < prop:
+                return 0
+            address += size + 1
         return 0
     
     def get_default_property_address(self, prop):
         return self.object_table_start + (prop - 1) * 2
     
-    def get_object_property_size(self, obj=0, prop=0, address=0):
-        if not address:
-            address = self.get_object_property_address(obj, prop)
-        address -= 1
-        if self.version < 4:
-            return self.memory[address] // 32 + 1
-        else:
-            if self.memory[address] & 0x80:
-                size = self.memory[address] & 0x3F
-                if size == 0:
-                    size = 64
-                return size
-            else:
-                return 1
+    def get_property_size(self, obj, prop):
+        address = self.get_object_property_address(obj, prop) - 1
+        return self.memory[address] // 32 + 1
     
-    def get_object_property_number(self, address):
-        if self.version < 4:
-            return self.memory[address - 1] % 32
-        else:
-            address -= 1
-            if self.memory[address] & 0x80:
-                address -= 1
-            return self.memory[address] & 0x3F
-    
-    def get_object_parent(self, obj=0, address=0):
-        if obj == 0 and address == 0:
+    def get_object_parent(self, obj):
+        if obj == 0:
+            #raise StoryError, "Attempted to read the parent of null object"
             return 0
-        if address == 0:
-            address = self.get_object_address(obj)
-        if self.version < 4:
-            return self.memory[address + 4]
-        else:
-            return self.unsigned_number(address + 6)
+        address = self.get_object_address(obj)
+        return self.memory[address + 4]
     
-    def get_object_sibling(self, obj=0, address=0):
-        if obj == 0 and address == 0:
+    def get_object_sibling(self, obj):
+        if obj == 0:
             raise StoryError, "Attempted to find the sibling of null object"
-        if address == 0:
-            address = self.get_object_address(obj)
-        if self.version < 4:
-            return self.memory[address + 5]
-        else:
-            return self.unsigned_number(address + 8)
-    
-    def get_object_child(self, obj=0, address=0):
-        if obj == 0 and address == 0:
-            raise StoryError, "Attempted to find the child of the null object"
-        if address == 0:
-            address = self.get_object_address(obj)
-        if self.version < 4:
-            return self.memory[address + 6]
-        else:
-            return self.unsigned_number(address + 10)
-    
-    def set_object_parent(self, obj=0, new_parent=0, address=0):
-        if address == 0:
-            address = self.get_object_address(obj)
-        if self.version < 4:
-            self.memory[address + 4] = new_parent
-        else:
-            self.set_number(address + 6, new_parent)
-    
-    def set_object_sibling(self, obj=0, new_sibling=0, address=0):
-        if address == 0:
-            address = self.get_object_address(obj)
-        if self.version < 4:
-            self.memory[address + 5] = new_sibling
-        else:
-            self.set_number(address + 8, new_sibling)
-    
-    def set_object_child(self, obj=0, new_child=0, address=0):
-        if address == 0:
-            address = self.get_object_address(obj)
-        if self.version < 4:
-            self.memory[address + 6] = new_child
-        else:
-            self.set_number(address + 10, new_child)
+        address = self.get_object_address(obj)
+        return self.memory[address + 5]
     
     def get_object_previous_sibling(self, obj):
         object_parent = self.get_object_parent(obj)
         if object_parent > 0:
-            parent_child = self.get_object_child(object_parent)
+            parent_address = self.get_object_address(object_parent)
+            parent_child = self.memory[parent_address + 6]
             if parent_child == obj:
                 return 0
             else:
                 this_object = parent_child
                 while True:
                     address = self.get_object_address(this_object)
-                    next_sibling = self.get_object_sibling(this_object)
-                    if next_sibling == obj:
+                    if self.memory[address + 5] == obj:
                         return this_object
                     else:
-                        this_object = next_sibling
+                        this_object = self.memory[address + 5]
                         if this_object == 0:
                             raise StoryError, "The tree is not well-founded. D:"
         return 0
     
-    def print_string(self, ascii):
-        if len(self.stream_3) > 0:
-            zchars = self.ascii_to_zscii(ascii)
-            self.memory[self.stream_3[-1]:self.stream_3[-1]+len(zchars)] = zchars
-            self.stream_3[-1] += len(zchars)
-        elif self.stream_1:
-            if self.version >= 5:
-                formats = ''
-                if self.text_style & TEXT_STYLE_REVERSE_VIDEO:
-                    formats += chr(22)
-                if self.text_style & TEXT_STYLE_BOLD:
-                    formats += chr(2)
-                if self.text_style & TEXT_STYLE_ITALIC:
-                    formats += chr(31)
-                if self.colour_fg != 2 or self.colour_bg != 9:
-                    ascii = "\x02\x03%s,%s%s\x03\x02" % (COLOUR_MAPPINGS[self.colour_fg], COLOUR_MAPPINGS[self.colour_bg], ascii)
-                ascii = '%s%s%s' % (formats, ascii, formats[::-1])
-            self.display_string(ascii)
+    def get_object_child(self, obj):
+        if obj == 0:
+            raise StoryError, "Attempted to get the child of null object"
+        address = self.get_object_address(obj)
+        return self.memory[address + 6]
     
     def display_string(self, ascii):
         self.output_buffer += ascii
@@ -859,41 +662,31 @@ class ZMachine(threading.Thread):
             else:
                 self.pc += target - 2
     
-    def call(self, routine, ret, *args):
+    
+    # Opcodes. :o
+    
+    # call
+    def op_var_0(self, *args):
         args = list(args)
-        routine = self.unpack_address(routine)
+        routine = self.unpack_address(args.pop(0))
         if routine == 0:
             self.store(0)
             return
         varcount = self.memory[routine]
         if varcount > 15:
-            raise StoryError, "Calling address %s without a routine!" % routine
+            raise StoryError, "Calling address %s without a routine!" % varcount
         self.pc += 1
-        self.call_stack.append(((0x7F >> (7 - len(args))) << 8) | varcount) # Values needed for Quetzal saves and check_arg_count (v5)
-        self.call_stack.append(ret)
+        self.call_stack.append(((0x7F >> len(args)) << 8) | varcount) # Values needed for Quetzal saves.
+        self.call_stack.append(self.memory[self.pc])
         self.call_stack.append(self.pc)
         self.call_stack.append(len(self.stack))
         for i in range(0, varcount):
             if args:
                 self.stack.append(args.pop(0)) # Push argument onto the stack
             else:
-                if self.version < 5:
-                    self.stack.append(self.unsigned_number(routine + i*2 +1)) # Push default value onto the stack
-                else:
-                    self.stack.append(0)
+                self.stack.append(self.unsigned_number(routine + i*2 +1)) # Push default value onto the stack
         
-        self.pc = routine
-        if self.version < 5:
-            self.pc += varcount * 2
-    
-    
-    # Opcodes. :o
-    
-    # call/call_vs
-    def op_var_0(self, *args):
-        args = list(args)
-        routine = args.pop(0)
-        self.call(routine, self.memory[self.pc+1], *args)
+        self.pc = routine + varcount*2
     
     # storew
     def op_var_1(self, arr, word_index, value):
@@ -906,7 +699,7 @@ class ZMachine(threading.Thread):
     # put_prop
     def op_var_3(self, obj, prop, value):
         address = self.get_object_property_address(obj, prop)
-        size = self.get_object_property_size(obj, prop)
+        size = self.get_property_size(obj, prop)
         if size == 1:
             self.memory[address] = value
         elif size == 2:
@@ -915,40 +708,27 @@ class ZMachine(threading.Thread):
             raise StoryError, "Illegal put_prop on property of size greater than two."
     
     # read
-    # (Note: we don't do anything with the time or routine parameters yet.)
-    def op_var_4(self, text, parse=None, time=0, routine=0):
+    def op_var_4(self, text, parse):
         self.display_string("\n")
         self.input_wait.clear()
         self.awaiting_input = True
         self.input_wait.wait()
         if self.input_text is None:
         	return
-        maxlength = self.memory[text]
-        if self.version < 4:
-            maxlength += 1
+        maxlength = self.memory[text] + 1
         read = self.input_text.lower()[0:maxlength]
         zscii = [ord(x) for x in read]
-        if self.version < 5:
-            self.memory[text+1:text+len(zscii)+1] = array('B', zscii)
-            self.memory[text + len(zscii) + 1] = 0
-        else:
-            self.memory[text+1] = len(zscii)
-            self.memory[text+2:text+len(zscii)+2] = array('B', zscii)
-        if not (parse is None):
-            self.tokenise_zscii(parse, zscii)
-        elif self.version < 5:
-            raise StoryError, "It is illegal to omit the parse parameter to @read before version 5."
-        
-        if self.version >= 5:
-            self.store(10)
+        self.memory[text+1:text+len(zscii)+1] = array('B',zscii)
+        self.memory[text + len(zscii) + 1] = 0
+        self.tokenise_zscii(parse, zscii)
     
     # print_char
     def op_var_5(self, character):
-        self.print_string(self.zscii_to_ascii([character]))
+        self.display_string(self.zscii_to_ascii([character]))
     
     # print_num
     def op_var_6(self, value):
-        self.print_string(str(value))
+        self.display_string(str(value))
     
     # random
     def op_var_7(self, r):
@@ -975,209 +755,14 @@ class ZMachine(threading.Thread):
     def op_var_b(self, lines):
         pass
     
-    # call_vs2
-    def op_var_c(self, routine, *args):
-        self.call(routine, self.memory[self.pc+1], *args)
-    
-    # erase_window
-    def op_var_d(self, window):
-        pass
-    
-    # erase_line
-    def op_var_e(self, value):
-        pass
-    
-    # set_cursor
-    def op_var_f(self, line, column):
-        pass
-    
-    # get_cursor
-    def op_var_10(self, arr):
-        raise InternalError, "get_cursor isn't implemented."
-
-    # set_text_style
-    def op_var_11(self, style):
-        if style == TEXT_STYLE_ROMAN:
-            self.text_style = TEXT_STYLE_ROMAN
-        else:
-            self.text_style |= style
-    
-    # buffer_mode
-    def op_var_12(self, flag):
-        pass
-    
     # output_stream
-    def op_var_13(self, number, table=None):
-        signed = self.sign(number)
-        if signed > 4:
-            number = self.sign(number, bits=8)
-        else:
-            number = signed
-        
-        if number == 1:
-            self.stream_1 = True
-        elif number == -1:
-            self.stream_1 = False
-        elif number == 2:
-            self.stream_2 = True
-            self.memory[0x10] |= 0x01 # See section 7.4
-        elif number == -2:
-            self.stream_2 = False
-            self.memory[0x10] &= ~0x01 # See section 7.4
-        elif number == 3:
-            if len(self.stream_3) > 15:
-                raise StoryError, "Can't have more than sixteen levels of stream 3!"
-            if table is None:
-                raise StoryError, "Must specify a table when opening stream 3"
-            self.stream_3.append(table)
-        elif number == -3:
-            if len(self.stream_3) > 0:
-                stream_3.pop()
-        elif number == 4:
-            self.stream_4 = True
-        elif number == -4:
-            self.stream_4 = False
+    def op_var_13(self, number):
         logger.warn("Attempted to set output stream to %s (unsupported)" % number)
     
     # input_stream
     def op_var_14(self, number):
         logger.warn("Attempted to set input stream to %s (unsupported)" % number)
     
-    # sound_effect
-    def op_var_15(self, number=0, volume=0, routine=0):
-        pass
-    
-    # read_char
-    def op_var_16(self, pointless_argument, time=0, routine=0):
-        self.display_string(" (Please type one character)\n")
-        self.input_wait.clear()
-        self.awaiting_input = True
-        self.input_wait.wait()
-        if self.input_text is None:
-            return
-        self.store(self.ascii_to_zscii(self.input_text))
-    
-    # scan_table
-    def op_var_17(self, x, table, length, form=0x82):
-        for i in xrange(table, table+length, form & 0xFF):
-            if form & 0x80:
-                if x == self.memory[i]:
-                    self.store(i)
-                    break
-            else:
-                if x == ((self.memory[i] << 8) | self.memory[i+1]):
-                    self.store(i)
-                    break
-        else:
-            self.store(0)
-            self.branch(False)
-            return
-        
-        self.branch(True)
-    
-    # not (Version 5+)
-    def op_var_18(self, value):
-        self.store((~value) & 0xFFFF)
-    
-    # call_vn
-    def op_var_19(self, routine, *args):
-        self.call(routine, 65535, *args)
-    
-    # call_vn2
-    def op_var_1a(self, routine, *args):
-        self.call(routine, 65535, *args)
-    
-    # tokenise
-    def op_var_1b(self, text, parse, dictionary=0, flag=0):
-        length = self.memory[text]
-        zscii = self.memory[text+1:text+length+1]
-        logger.info("Tokenising \"%s\"." % self.zscii_to_ascii(zscii))
-        self.tokenise_zscii(parse, zscii, dictionary=dictionary, leave_unknowns=bool(flag))
-    
-    # encode_text
-    def op_var_1c(self, zscii, length, start, coded):
-        zscii = self.memory[zscii:zscii+length]
-        zchars = self.zscii_to_zchar(zscii, 6)
-        self.memory[coded:coded+6] = array('B', zchars)
-    
-    # copy_table
-    def op_var_1d(self, first, second, size):
-        if second == 0:
-            self.memory[first:first+size] = array('B', [0]) * size
-        else:
-            if size < 0:
-                r = xrange(0, size)
-                size *= -1
-            elif first < second:
-                r = xrange(size - 1, -1, -1)
-            else:
-                r = xrange(0, size)
-            for i in r:
-                self.memory[second+i] = self.memory[first+i]
-    
-    # print_table
-    def op_var_1e(self, table, width, height=1, skip=0):
-        self.display_string("\n")
-        i = table
-        for x in range(0, height):
-            self.display_string(self.zscii_to_ascii(self.memory[i:i+width])+"\n")
-            i += width + skip
-    
-    # check_arg_count
-    def op_var_1f(self, arg_number):
-        arg_data = self.call_stack[-4] >> 8
-        self.branch(arg_data & (1 << (arg_number - 1)))
-    
-    # save (Versions 5+)
-    def op_ext_0(self, table=0, bytes=0, name=0):
-        # Meh to the optional stuff for now.
-        self.op_0op_5() # save (Versions 1-4)
-    
-    # restore (Versions 5+)
-    def op_ext_1(self, table=0, bytes=0, name=0):
-        # Still meh.
-        self.op_0op_6() # restore (Versions 1-4)
-    
-    # log_shift
-    def op_ext_2(self, number, places):
-        if places > 0:
-            self.store(number << places)
-        else:
-            self.store(number >> places * -1)
-    
-    # art_shift
-    def op_ext_3(self, number, places):
-        if places > 0:
-            self.store(number << places)
-        else:
-            sign = number & 0x8000
-            number = number >> places * -1
-            if sign != 0:
-                number |= 0x8000
-            self.store(number)
-    
-    # set_font
-    def op_ext_4(self, font):
-        # We can't change fonts.
-        self.store(0)
-    
-    # save_undo
-    def op_ext_9(self):
-        self.store(-1)
-    
-    # restore_undo
-    def op_ext_10(self):
-        self.store(0)
-    
-    # print_unicode
-    def op_ext_b(self, char_number):
-        self.print_string(unichr(char_number))
-    
-    # check_unicode
-    def op_ext_c(self, char_number):
-        # Guess.
-        self.store(0x3)
-        
     # rtrue
     def op_0op_0(self):
         self.op_1op_b(1) # ret 1
@@ -1192,7 +777,7 @@ class ZMachine(threading.Thread):
         self.pc += (len(zchars) / 3) * 2
         zscii = self.zchar_to_zscii(zchars)
         ascii = self.zscii_to_ascii(zscii)
-        self.print_string(ascii)
+        self.display_string(ascii)
     
     # print_ret
     def op_0op_3(self):
@@ -1204,7 +789,7 @@ class ZMachine(threading.Thread):
     def op_0op_4(self):
         pass # Useful, isn't it?
     
-    # save (Versions 1 through 4)
+    # save
     def op_0op_5(self):
         self.display_string("Please enter a filename:\n")
         self.input_wait.clear()
@@ -1212,12 +797,9 @@ class ZMachine(threading.Thread):
         self.input_wait.wait()
         if not (self.input_text is None):
             success = self.save_game(self.input_text)
-            if self.version < 4:
-                self.branch(success)
-            else:
-                self.store(int(success))
+            self.branch(success)
     
-    # restore (Versions 1 through 4)
+    # restore
     def op_0op_6(self):
         self.display_string("Please enter a filename:\n")
         self.input_wait.clear()
@@ -1225,10 +807,7 @@ class ZMachine(threading.Thread):
         self.input_wait.wait()
         if not (self.input_text is None):
             success = self.load_game(self.input_text)
-            if self.version < 4:
-                self.branch(int(success))
-            else:
-                self.store(2)
+            self.branch(success)
     
     # restart
     def op_0op_7(self):
@@ -1242,15 +821,9 @@ class ZMachine(threading.Thread):
     def op_0op_8(self):
         self.op_1op_b(self.stack.pop())
     
-    # pop (Versions 1 through 4)
-    # catch (Versions 5+)
+    # pop
     def op_0op_9(self):
-        if self.version < 5:
-            # pop
-            self.stack.pop()
-        else:
-            # catch
-            self.store(len(self.call_stack))
+        self.stack.pop()
     
     # quit
     def op_0op_a(self):
@@ -1268,18 +841,11 @@ class ZMachine(threading.Thread):
     
     # set_status
     def op_0op_c(self):
-        if self.version > 3:
-            raise StoryError, "@set_status is illegal after version 3."
         pass
     
     # verify
     def op_0op_d(self):
-        # I'm lazy. Not going to bother to implement this.
-        self.branch(True)
-    
-    # piracy
-    def op_0op_f(self):
-        # What the hell am I supposed to do here? Guess?
+        # I'm lazy. Not going to bother to implement DRM.
         self.branch(True)
     
     # jz
@@ -1308,7 +874,7 @@ class ZMachine(threading.Thread):
         if address == 0:
             self.store(0)
         else:
-            self.store(self.get_object_property_size(address=address))
+            self.store(self.memory[address - 1] // 32 + 1)
     
     # inc
     def op_1op_5(self, variable):
@@ -1327,28 +893,26 @@ class ZMachine(threading.Thread):
         zchars = self.z_string(address)
         zscii = self.zchar_to_zscii(zchars)
         ascii = self.zscii_to_ascii(zscii)
-        self.print_string(ascii)
-    
-    # call_1s
-    def op_1op_8(self, routine):
-        self.call(routine, self.memory[self.pc+1])
+        self.display_string(ascii)
     
     # remove_obj
     def op_1op_9(self, obj):
         address = self.get_object_address(obj)
         previous_sibling = self.get_object_previous_sibling(obj)
         if previous_sibling == 0:
-            parent = self.get_object_parent(obj)
+            parent = self.memory[address + 4]
             if parent > 0:
-                self.set_object_child(parent, self.get_object_sibling(obj))
+                parent_address = self.get_object_address(obj)
+                self.memory[parent_address + 6] = self.memory[address + 5]
         else:
-            self.set_object_sibling(previous_sibling, self.get_object_sibling(obj))
-        self.set_object_parent(obj, 0)
-        self.set_object_sibling(obj, 0)
+            previous_address = self.get_object_address(previous_sibling)
+            self.memory[previous_address + 5] = self.memory[address + 5]
+        self.memory[address + 5] = 0
+        self.memory[address + 4] = 0
     
     # print_obj
     def op_1op_a(self, obj):
-        self.print_string(self.zscii_to_ascii(self.zchar_to_zscii(self.get_object_name(obj))))
+        self.display_string(self.zscii_to_ascii(self.zchar_to_zscii(self.get_object_name(obj))))
     
     # ret
     def op_1op_b(self, ret):
@@ -1357,10 +921,7 @@ class ZMachine(threading.Thread):
         var = self.call_stack.pop()
         self.call_stack.pop() # Useless bytes.
         self.stack = self.stack[0:stack_top]
-        if var != 65535:
-            self.set_variable(var, ret)
-        else:
-            pc -= 1
+        self.set_variable(var, ret)
         self.pc = pc
     
     # jump
@@ -1373,25 +934,19 @@ class ZMachine(threading.Thread):
         address = self.unpack_address(address)
         zchars = self.z_string(address)
         zscii = self.zchar_to_zscii(zchars)
-        self.print_string(self.zscii_to_ascii(zscii))
+        self.display_string(self.zscii_to_ascii(zscii))
     
     # load
     def op_1op_e(self, variable):
         self.store(self.get_variable(variable))
     
-    # not (Versions 1 through 4)
-    # call_1n (Versions 5+)
-    def op_1op_f(self, operand):
-        if self.version < 5:
-            # not
-            self.store((~operand) & 0xFFFF)
-        else:
-            # call_1n
-            self.call(operand, 65535)
+    # not
+    def op_1op_f(self, value):
+        self.store((~value) & 0xFFFF)
     
-    # je
-    def op_2op_1(self, a, b, c=None, d=None):
-        self.branch(a == b or a == c or a == d)
+    # je (with two operands)
+    def op_2op_1(self, a, b):
+        self.branch(a == b)
     
     # jl
     def op_2op_2(self, a, b):
@@ -1455,23 +1010,26 @@ class ZMachine(threading.Thread):
     
     # insert_obj
     def op_2op_e(self, obj, destination):
+        obj_addr = self.get_object_address(obj)
+        dest_addr = self.get_object_address(destination)
+        
         # The net aim of all of this is to move the object from one place to another.
         # This first part rebuilds the tree around its current position, jumping over it.
         previous_sibling = self.get_object_previous_sibling(obj)
         if previous_sibling == 0:
             # Set the child of the parent of the object to the sibling of the object
-            self.set_object_child(self.get_object_parent(obj), self.get_object_sibling(obj))
+            self.memory[self.get_object_address(self.get_object_parent(obj)) + 6] = self.memory[obj_addr + 5]
         else:
             # Set the object that this object was a sibling of's sibling to the sibling of this object.
-            self.set_object_sibling(previous_sibling, self.get_object_sibling(obj))
+            self.memory[self.get_object_address(previous_sibling) + 5] = self.memory[obj_addr + 5]
         
         # This second part rebuilds the tree around its new position, including it
         # Set the sibling of the object to the child of the destination
-        self.set_object_sibling(obj, self.get_object_child(destination))
+        self.memory[obj_addr + 5] = self.memory[dest_addr + 6]
         # Set the child of the destination to the object
-        self.set_object_child(destination, obj)
+        self.memory[dest_addr + 6] = obj
         # Set the parent of the object to the destination
-        self.set_object_parent(obj, destination)
+        self.memory[obj_addr + 4] = destination
     
     # loadw
     def op_2op_f(self, array, word_index):
@@ -1488,7 +1046,7 @@ class ZMachine(threading.Thread):
         if address == 0:
             address = self.get_default_property_address(prop)
         else:
-            size = self.get_object_property_size(obj, prop)
+            size = (self.memory[address - 1] // 32) + 1
         if size == 1:
             self.store(self.memory[address])
         elif size == 2:
@@ -1499,27 +1057,20 @@ class ZMachine(threading.Thread):
         self.store(self.get_object_property_address(obj, prop))
     
     # get_next_prop
-    # This may well be wrong.
     def op_2op_13(self, obj, prop):
         if prop == 0:
             address = self.get_object_property_table_address(obj)
             address += self.memory[address] * 2 + 1
-            if self.version < 4:
-                address += 1
-            else:
-                if self.memory[address] & 0x80:
-                    address += 2
-                else:
-                    address += 1
         else:
             address = self.get_object_property_address(obj, prop)
-            address += self.get_object_property_size(address=address)
+            address += self.memory[address - 1] // 32 + 1
+        next_size_byte = self.memory[address]
         if address == 0:
             raise StoryError, "Illegal get_next_prop on nonexistent object property"
         if next_size_byte == 0:
             self.store(0)
         else:
-            self.store(self.get_object_property_number(address))
+            self.store(next_size_byte % 32)
     
     # add
     def op_2op_14(self, a, b):
@@ -1555,23 +1106,13 @@ class ZMachine(threading.Thread):
             raise StoryError, "Modulo by zero!"
         self.store(a % b)
     
-    # call_2s
-    def op_2op_19(self, routine, arg):
-        self.call(routine, self.memory[self.pc+1], arg)
+    # je (with three arguments)
+    def op_3op_1(self, a, b, c):
+        self.branch(a == b or a == c)
     
-    # call_2n
-    def op_2op_1a(self, routine, arg):
-        self.call(routine, 65535, arg)
-    
-    # set_colour
-    def op_2op_1b(self, foreground, background):
-        self.colour_fg = foreground
-        self.colour_bg = background
-    
-    # throw
-    def op_2op_1c(self, value, stack_frame):
-        self.call_stack = self.call_stack[0:stack_frame]
-        self.op_1op_b(value) # ret value
+    # je (with four arguments)
+    def op_4op_1(self, a, b, c, d):
+        self.branch(a == b or a == c or a == d)
 
 class QuetzalSaver(object):
     machine = None
@@ -1846,7 +1387,6 @@ def terminate_machine(network, channel):
     logger.info("Shut down %s sucessfully." % (machine))
 
 def launch_machine(irc, channel, story):
-    logger.info("Launching Z-Machine...")
     z_machine = ZMachine(irc, channel, story)
     machine = "%s/%s" % (irc.network.name, channel)
     z_machines[machine] = z_machine
@@ -1858,7 +1398,13 @@ def init():
 
 def privmsg(irc, origin, args):
     irc_helpers = m('irc_helpers')
-    target, command, args = irc_helpers.parse(args)
+    message = args[1]
+    target = args[0]
+    foo, command, args = irc_helpers.parse(args)
+    if command is None:
+        if message[0] == '>':
+            process_machine_message(irc.network.name, target, message[1:].strip())
+        return
     if command == 'zdo':
         message = ' '.join(args)
         process_machine_message(irc.network.name, target, message)

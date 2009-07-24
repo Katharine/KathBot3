@@ -1,6 +1,6 @@
 # encoding=utf-8
 class PotentialInfiniteLoop(Exception): pass
-from xml.sax.saxutils import unescape
+from htmlentitydefs import name2codepoint
 import re
 
 def format(msg):
@@ -86,7 +86,9 @@ def html_to_irc(html):
     # Clear left-over tags
     irc = re.sub('<.+?>', '', irc)
     # Deal with entities
-    irc = unescape(re.sub('&#([0-9]+);?', lambda x: unichr(int(x.group(1))), irc))
+    irc = re.sub('&#([0-9]+);?', lambda x: unichr(int(x.group(1))), irc)
+    irc = re.sub('&(%s);' % '|'.join(name2codepoint), lambda m: unichr(name2codepoint[m.group(1)]), irc)
+
     # Deal with newlines
     irc = re.sub('\n+', '\n', irc)
     return irc

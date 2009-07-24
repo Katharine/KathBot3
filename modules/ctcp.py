@@ -2,6 +2,7 @@ import time
 import sys
 import datetime
 from subprocess import Popen, PIPE
+import random
 
 def init():
     add_hook('privmsg', privmsg)
@@ -35,3 +36,5 @@ def privmsg(irc, origin, args):
             respond(irc, nick, 'TIME %s' % datetime.datetime.now().strftime('%a, %d %b %Y %H:%M %z'))
         elif command == 'GESTALT':
             respond(irc, nick, 'GESTALT %s' % Popen(["uptime"], stdout=PIPE).communicate()[0].strip())
+        elif command == 'BACON': # Because Selig said so.
+            respond(irc, nick, 'BACON $%s.%s' % (random.randint(0, 10), random.randint(10, 99)))
