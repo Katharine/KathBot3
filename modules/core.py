@@ -71,7 +71,7 @@ def privmsg(irc, origin, args):
             irc_helpers.message(irc, target, "Sent message.")
         elif command == 'threads':
             threads = u' · '.join(sorted(['~B%s~B: %s' % (x.__class__.__name__, x.getName()) for x in threading.enumerate()]))
-            irc_helpers.message(irc, target, '~B[THREADING]~B %s' % threads)
+            irc_helpers.message(irc, target, '~B[Threading]~B %s' % threads)
         elif command == 'modules':
             mod = u' · '.join(sorted(modules.mods.keys()))
             irc_helpers.message(irc, target, '~B[Modules]~B %s' % mod)
