@@ -1245,14 +1245,14 @@ class QuetzalSaver(object):
     
     def write_ANNO(self, stream):
         message = "Version %s game, saved by KathBot3 @%s" % (self.machine.version, datetime.datetime.now())
-        stream.write("ANNO%s%s" % (struct.pack('!I', len(message)), message))
+        stream.write("ANNO%s%s" % (struct.pack('!I', len(message)), message.encode('utf-8')))
         
         if len(message) % 2 == 1:
             stream.write('\x00')
     
     def write_AUTH(self, stream):
         message = "The members of %s on %s" % (self.machine.channel, self.machine.irc.network.server)
-        stream.write("AUTH%s%s" % (struct.pack('!I', len(message)), message))
+        stream.write("AUTH%s%s" % (struct.pack('!I', len(message)), message.encode('utf-8')))
         
         if len(message) % 2 == 1:
             stream.write('\x00')
@@ -1367,7 +1367,7 @@ def process_machine_message(network, channel, message):
         return
     if z_machine.awaiting_input:
         z_machine.input_text = message.strip()
-        z_machine.input_wait.setchannel
+        z_machine.input_wait.set()
     else:
         logger.info("Z-Machine didn't want input.")
 
@@ -1409,8 +1409,11 @@ def message(irc, channel, origin, command, args):
             m('irc_helpers').message(irc, channel, "Error launching Z-Machine: %s" % message)
 
 def privmsg(irc, origin, args):
+    target = args[0]
+    if target[0] != '#':
+        target = origin.nick
     if args[1][0] == '>':
-        process_machine_message(irc.network.name, args[0], args[1][1:].strip())
+        process_machine_message(irc.network.name, target, args[1][1:].strip())
     
         
 

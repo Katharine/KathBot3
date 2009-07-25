@@ -1,4 +1,5 @@
 # encoding=utf-8
+from __future__ import with_statement
 import os
 import os.path
 import datetime
@@ -16,25 +17,20 @@ def init():
     add_hook('topic', topic)
     add_hook('nick', nick)
 
-def acquire_lock(network, channel):
+def chan_lock(network, channel):
     key = '%s/%s' % (network, channel)
     if key not in locks:
         locks[key] = threading.Lock()
-    locks[key].acquire()
-
-def release_lock(network, channel):
-    locks['%s/%s' % (network, channel)].release()
+    return locks[key]
 
 def writeline(network, channel, line):
     network = network.replace('/', '_')
     channel = channel.replace('/', '_')
-    acquire_lock(network, channel)
-    if not os.path.exists("data/logs/%s" % network):
-        os.mkdir("data/logs/%s" % network)
-    f = open("data/logs/%s/%s.log" % (network, channel), 'a')
-    f.write("[%s] %s\n" % (datetime.datetime.utcnow().strftime('%m/%d/%Y %H:%M:%S'), line))
-    f.close()
-    release_lock(network, channel)
+    with chan_lock(network, channel):
+        if not os.path.exists("data/logs/%s" % network):
+            os.mkdir("data/logs/%s" % network)
+        with open("data/logs/%s/%s.log" % (network, channel), 'a') as f:
+            f.write("[%s] %s\n" % (datetime.datetime.utcnow().strftime('%m/%d/%Y %H:%M:%S'), line.encode('utf-8')))
 
 def privmsg(irc, origin, args):
     channel = args[0]

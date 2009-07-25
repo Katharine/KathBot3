@@ -7,7 +7,7 @@ import textwrap
 import simplejson as json
 import aspell
 
-COMMANDS = frozenset(('google', 'wikipedia', 'wiki', 'define', 'translate', 'spell',))
+COMMANDS = frozenset(('google', 'wikipedia', 'wiki', 'define', 'translate', 'spell', 'lsl',))
 
 # Various UAs from Safari's Develop menu.
 USER_AGENTS = (
@@ -70,8 +70,9 @@ def message(irc, channel, origin, command, args):
             irch.message(irc, channel, "An error occurred and the search could not be completed.", tag='Google')
     elif command == 'wikipedia' or command == 'wiki':
         if len(args) == 0:
-            args = 'Special:Random'
-        page = ' '.join(args)
+            page = 'Special:Random'
+        else:
+            page = ' '.join(args)
         url = 'http://en.wikipedia.org/wiki/%s' % escapeurl(page.replace(' ','_'))
         try:
             text = load_url(url)
@@ -87,7 +88,7 @@ def message(irc, channel, origin, command, args):
         old_text = text
         while '</table>' in old_text and old_text.find('</table>') < old_text.find('<p>'):
             old_text = text
-            text = textchannel
+            text = text[text.find('</table')+8:]
         text = old_text
         del old_text
         text = re.sub('(?is)<div class=.+?>.+?</div>', '', text)
@@ -120,7 +121,7 @@ def message(irc, channel, origin, command, args):
     elif command == 'translate':
         string = ' '.join(args)
         try:
-            data = load_url('http://ajax.googleapis.com/ajax/services/language/translate?v=1.0&q=%s&langpair=%%7Cen' % escapeurl(string))
+            data = load_url('http://ajax.googleapis.com/ajax/services/language/translate?v=1.0&q=%s&langpair=%%7Cen' % escapeurl(string.encode('utf-8')))
         except urllib2.HTTPError:
             irch.message(irc, channel, "Translation failed.")
             return
@@ -143,3 +144,16 @@ def message(irc, channel, origin, command, args):
                     formatted += ' or '
                 formatted += last
             irch.message(irc, channel, "~B%s~B is spelt incorrectly. Did you mean one of %s?" % (word, formatted))
+    elif command == 'lsl':
+        if len(args) == 0:
+            irch.message(irc, channel, "What did you want to look up?")
+        else:
+            f = urllib2.urlopen('https://svn.secondlife.com/svn/linden/trunk/indra/lscript/lscript_library/lscript_library.cpp')
+            data = f.read()
+            f.close()
+            matches = re.search(r'(?i)new LLScriptLibraryFunction\([0-9]+?.f, ([0-9]+?).f, dummy_func, "%s", .+?, .+?, "(.+?)"(:?, TRUE)?\)' % args[0], data)
+            if matches is None:
+                irch.message(irc, channel, "Unknown function ~B%s~B." % args[0], tag='LSL')
+            else:
+                irch.message(irc, channel, matches.group(2).replace(r'\n', '\n'), tag='LSL')
+                irch.message(irc, channel, "Sleep: ~B%s~B seconds." % matches.group(1), tag='LSL')

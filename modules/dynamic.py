@@ -122,12 +122,16 @@ def dotree(node, irc, origin, args, channel, variables=None):
             'argcount': len(args),
             '__builtins__': None, # Disable the builtin functions.
         }
-        try:
-            chantrack = m('chantrack')
-            variables['usercount'] = len(chantrack.network(irc)[channel].users)
-            variables['topic'] = chantrack.network(irc)[channel].topic
-        except ModuleNotLoaded:
-            pass
+        if channel[0] == '#':
+            try:
+                chantrack = m('chantrack')
+                variables['usercount'] = len(chantrack.network(irc)[channel].users)
+                variables['topic'] = chantrack.network(irc)[channel].topic
+            except ModuleNotLoaded:
+                pass
+        else:
+            variables['usercount'] = 1
+            variables['topic'] = 'N/A'
         for i in range(0, len(args)):
             variables['arg%s' % i] = args[i]
 
@@ -159,6 +163,10 @@ def dotree(node, irc, origin, args, channel, variables=None):
                 if child.name == 'else':
                     value += stringify(dotree(child, irc, origin, args, channel, variables))
             return value
+    elif node.name == 'l':
+        return '['
+    elif node.name == 'r':
+        return ']'
     elif node.name == 'repeat':
         try:
             if node.attribute in variables:
@@ -264,10 +272,13 @@ def dotree(node, irc, origin, args, channel, variables=None):
     elif node.name == '|':
         return ''
     elif node.name == 'rnick':
-        try:
-            return random.choice(m('chantrack').network(irc)[channel].users.values())
-        except ModuleNotLoaded:
-            return origin.nick
+        if channel[0] != '#':
+            return random.choice((irc.nick, channel))
+        else:
+            try:
+                return random.choice(m('chantrack').network(irc)[channel].users.values()).nick
+            except ModuleNotLoaded:
+                return origin.nick
     elif node.name == 'try':
         if node.attribute in variables:
             return variables[node.attribute]

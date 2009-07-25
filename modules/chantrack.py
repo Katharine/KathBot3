@@ -2,6 +2,11 @@ from datetime import datetime
 import modules
 import networks
 
+USER_MODES = 'ovhqa'
+CHANNEL_MODES = 'cimnprstuzACGMKNOQRSTV'
+ARG_MODES = 'befIjklL'
+PREFIX_MODES = {'~': 'q', '&': 'a', '@': 'o', '%': 'h', '+': 'v'}
+
 channels = {}
 
 def init():
@@ -15,6 +20,8 @@ def init():
     add_hook('kick', kick)
     add_hook('quit', quit)
     add_hook('nick', nick)
+    add_hook('324', initial_mode)
+    add_hook('mode', mode)
     
     for network in networks.networks:
         irc = networks.networks[network]
@@ -26,10 +33,13 @@ def channel_list(irc, origin, args):
         channels = [x.lstrip('@+') for x in args[2].split(' ')]
         for channel in channels:
             irc.raw("NAMES %s" % channel)
+            irc.raw("MODE %s" % channel)
 
 def userhosts(irc, origin, args):
-    data = args[1].split(' ')
+    data = args[1].strip().split(' ')
     for datum in data:
+        if not datum:
+            continue
         datum = datum.split('=', 1)
         nick = datum[0].rstrip('*')
         hostmask = datum[1].lstrip('+-').split('@', 1)
@@ -56,13 +66,49 @@ def join(irc, origin, args):
         network(irc)[channel] = Channel(name=channel)
         logger.info("Added channel %s/%s" % (irc.network, channel))
         modules.call_hook('joined', irc, channel)
+        irc.raw("MODE %s" % channel)
     else:
         logger.info("Added nick %s to %s/%s" % (origin.nick, irc.network, channel))
     user = create_user(irc, origin.nick)
     network(irc)[channel].users[origin.nick.lower()] = user
     if not user.hostname:
         irc.raw("USERHOST %s" % origin.nick)
-    
+
+def mode(irc, origin, args):
+    channel = args[0]
+    modes = args[1]
+    args = args[2:]
+    try: # lazy solution (to a problem that shouldn't exist anyway)!
+        channel = network(irc)[channel.lower()]
+    except:
+        return
+    arg_pointer = 0
+    direction = 1
+    for mode in modes:
+        if mode == '+':
+            direction = 1
+        elif mode == '-':
+            direction = -1
+        elif mode in USER_MODES:
+            nick = args[arg_pointer]
+            arg_pointer += 1
+            if nick.lower() in channel.users:
+                user = channel.users[nick.lower()]
+                if direction > 0:
+                    user.modes.add(mode)
+                elif direction < 0 and mode in user.modes:
+                    user.modes.remove(mode)
+        elif mode in CHANNEL_MODES:
+            if direction > 0:
+                channel.modes.add(mode)
+            elif direction < 0 and mode in channel.modes:
+                channel.modes.remove(mode)
+        elif mode in ARG_MODES:
+            arg_pointer += 1
+
+def initial_mode(irc, origin, args):
+    mode(irc, origin, args[1:])
+        
 
 def initial_topic(irc, origin, args):
     channel = args[1].lower()
@@ -83,12 +129,11 @@ def userlist(irc, origin, args):
     nicks = args[3].split(' ')
     lookup = []
     for nick in nicks:
-        nick = nick.lstrip('+%@~&^!')
         user = create_user(irc, nick)
-        channel.users[nick.lower()] = user
+        channel.users[user.nick.lower()] = user
         if not user.hostname:
-            lookup.append(nick)
-        logger.info("Added nick %s to %s/%s" % (nick, irc.network, channel))
+            lookup.append(user.nick)
+        logger.info("Added nick %s to %s/%s" % (user.nick, irc.network, channel))
     if lookup:
         irc.raw("USERHOST %s" % ' '.join(lookup))
 
@@ -161,12 +206,14 @@ class Channel(object):
     topic = ''
     joined = None
     name = ''
+    modes = None
     
     def __init__(self, name='', topic=''):
         self.users = {}
         joined = datetime.now()
         self.name = name
         self.topic = topic
+        self.modes = set()
         
     def __str__(self):
         return self.name
@@ -174,13 +221,20 @@ class Channel(object):
 class User(object):
     nick = ''
     hostname = ''
-    modes = ''
+    modes = None
     ident = ''
     
-    def __init__(self, nick='', hostname='', modes='', ident=''):
+    def __init__(self, nick='', hostname='', modes=None, ident=''):
+        self.modes = modes
+        if self.modes is None:
+            self.modes = set()
+        
+        modechar = nick[0]
+        if modechar in PREFIX_MODES:
+            nick = nick[1:]
+            self.modes.add(PREFIX_MODES[modechar])
         self.nick = nick
         self.hostname = hostname
-        self.modes = modes
         self.ident = ident
     
     def __str__(self):

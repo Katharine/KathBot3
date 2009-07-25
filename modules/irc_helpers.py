@@ -3,6 +3,7 @@ class PotentialInfiniteLoop(Exception): pass
 from htmlentitydefs import name2codepoint
 import re
 import modules
+import textwrap
 
 def format(msg):
     return msg.replace('~B', chr(2)).replace('~U', chr(31)).replace('~I', chr(22))
@@ -28,32 +29,34 @@ def message(irc, target, msg, fmt=True, tag=None):
     pre_B = False
     pre_I = False
     pre_U = False
-    for line in lines:
-        if not line:
+    for maybe_line in lines:
+        if not maybe_line:
             continue
-        if pre_B:
-            line = '~B' + line
-        if pre_I:
-            line = '~I' + line
-        if pre_U:
-            line = '~U' + line
-        pre_B, pre_I, pre_U = (False, False, False)
-        if line.count('~B') % 2 == 1:
-            pre_B = True
-            line += '~B'
-        if line.count('~I') % 2 == 1:
-            pre_I = True
-            line += '~I'
-        if line.count('~U') % 2 == 1:
-            pre_U = True
-            line += '~U'
-        if fmt:
-            line = format(line)
-        if tag is not None:
-            line = '\x02[%s]\x02 %s' % (tag, line)
-        elif line.startswith("/me"):
-            line = "\x01ACTION %s\x01" % line[4:]
-        irc.raw("PRIVMSG %s :%s" % (target, line))
+        real_lines = textwrap.wrap(maybe_line, 400)
+        for line in real_lines:
+            if pre_B:
+                line = '~B' + line
+            if pre_I:
+                line = '~I' + line
+            if pre_U:
+                line = '~U' + line
+            pre_B, pre_I, pre_U = (False, False, False)
+            if line.count('~B') % 2 == 1:
+                pre_B = True
+                line += '~B'
+            if line.count('~I') % 2 == 1:
+                pre_I = True
+                line += '~I'
+            if line.count('~U') % 2 == 1:
+                pre_U = True
+                line += '~U'
+            if fmt:
+                line = format(line)
+            if tag is not None:
+                line = '\x02[%s]\x02 %s' % (tag, line)
+            elif line.startswith("/me"):
+                line = "\x01ACTION %s\x01" % line[4:]
+            irc.raw("PRIVMSG %s :%s" % (target, line))
 
 def notice(irc, target, msg, fmt=True):
     if fmt:
@@ -106,6 +109,8 @@ def privmsg(irc, origin, args):
         permitted = m('security').check_action_permissible(origin, command)
     except ModuleNotLoaded:
         permitted = True
+    if channel == irc.nick:
+        channel = origin.nick
     if permitted:
         modules.call_hook('message', irc, channel, origin, command, args)
     else:
