@@ -439,9 +439,7 @@ def message(irc, channel, origin, command, args):
                         source = format_source(parse_tree(source))
                     except ParseError, message:
                         irc_helpers.message(irc, channel, "~BParse error (%s); highlighting disabled.~B" % message)
-                    lines = textwrap.wrap(source, 480)
-                    for line in lines:
-                        irc_helpers.message(irc, channel, '~U%s~U: %s' % (args[0], line))
+                    irc_helpers.message(irc, channel, source, tag=args[0])
                 else:
                     irc_helpers.message(irc, channel, "The command ~B%s~B does not exist." % args[0])
         elif command == 'eval':

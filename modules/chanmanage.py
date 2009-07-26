@@ -23,6 +23,8 @@ def message(irc, channel, origin, command, args):
         if len(args) >= 1:
             modes = args[0]
         m('datastore').execute("UPDATE channels SET automode = ? WHERE network = ? AND channel = ?", modes, irc.network.name, channel)
+        if irc.network.name.lower() not in automode:
+            automode[irc.network.name.lower()] = {}
         automode[irc.network.name.lower()][channel.lower()] = modes
         irc_helpers.message(irc, channel, "Updated automode settings for %s" % channel)
     elif command == 'addchan':
