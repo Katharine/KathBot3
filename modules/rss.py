@@ -31,7 +31,7 @@ def message(irc, channel, origin, command, args):
         
         m('datastore').execute("INSERT INTO rss_subscriptions(network, channel, url) VALUES (?, ?, ?)", irc.network.name, channel.lower(), url)
         
-        irc_helpers.message(irc, channel, "Subscribed %s to %s" % (target, feed.feed.title))
+        irc_helpers.message(irc, channel, "Subscribed %s to %s" % (channel, feed.feed.title))
 
 def poll():
     logger.debug("Starting RSS poll.")

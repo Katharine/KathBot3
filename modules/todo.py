@@ -1,4 +1,4 @@
-COMMANDS = frozenset(('todo', 'done',))
+COMMANDS = frozenset(('todo', 'done', 'whattodo',))
 
 def init():
     add_hook('message', message)
@@ -26,6 +26,12 @@ def message(irc, channel, origin, command, args):
             todo = ' '.join(args)
             m('datastore').execute("INSERT INTO todo (uid, todo) VALUES (?, ?)", uid, todo)
             irch.message(irc, channel, "Added todo item.", tag='todo')
+    elif command == 'whattodo':
+        todo = m('datastore').query("SELECT todo FROM todo WHERE uid = ? ORDER BY RANDOM() LIMIT 1", uid)
+        if len(todo) == 0:
+            irch.message(irc, channel, "I don't know.", tag='todo')
+        else:
+            irch.message(irc, channel, todo[0][0], tag='todo')
     elif command == 'done':
         if len(args) == 0:
             irch.message(irc, channel, "What have you done?")

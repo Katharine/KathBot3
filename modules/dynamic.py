@@ -8,7 +8,7 @@ import os
 import math
 import textwrap
 
-PARENT_TAGS = ('if', 'else', 'choose', 'choice', 'c', 'set', 'try', 'length', 'indefinite', 'capitalise', 'math', 'repeat', 'while', 'get')
+PARENT_TAGS = ('if', 'else', 'choose', 'choice', 'c', 'set', 'try', 'length', 'indefinite', 'indef', 'capitalise', 'math', 'repeat', 'while', 'get')
 
 class ParseError(Exception): pass
 
@@ -115,6 +115,23 @@ def dotree(node, irc, origin, args, channel, variables=None):
         return node.attribute
     
     if variables is None:
+        simple_args = args
+        args = []
+        in_arg = False
+        for arg in simple_args:
+            if in_arg:
+                if arg[-1] == '"':
+                    args[-1].append(arg[0:-1])
+                    args[-1] = ' '.join(args[-1])
+                    in_arg = False
+                else:
+                    args[-1].append(arg)
+            elif arg[0] == '"':
+                args.append([arg[1:]])
+                in_arg = True
+            else:
+                args.append(arg)
+        del simple_args
         variables = {
             'nick': origin.nick,
             'hostname': origin.hostname,
@@ -163,6 +180,24 @@ def dotree(node, irc, origin, args, channel, variables=None):
                 if child.name == 'else':
                     value += stringify(dotree(child, irc, origin, args, channel, variables))
             return value
+    # include / import courtesy Selig.
+    elif node.name == 'include':
+        source = find_command(node.attribute)
+        try:
+            if source is not None:
+                return stringify(dotree(parse_tree(source), irc, origin, args, channel, variables))
+        except:
+            return ""
+        return "~B[Could not include: %s]~B" % node.attribute
+    elif node.name == 'import':
+        source = find_command(node.attribute)
+        try:
+            if source is not None:
+                dotree(parse_tree(source), irc, origin, args, channel, variables);
+                return "";
+        except:
+            return ""
+        return "~B[Could not import: %s]~B" % node.attribute
     elif node.name == 'l':
         return '['
     elif node.name == 'r':
@@ -320,9 +355,9 @@ def dotree(node, irc, origin, args, channel, variables=None):
         else:
             return contents
         return contents
-    elif node.name == 'indefinite':
+    elif node.name == 'indefinite' or node.name == 'indef':
         phrase = treelevel(node, irc, origin, args, channel, variables)
-        if phrase[0] in 'aeiou':
+        if phrase[0].lower() in 'aeiou':
             return "an %s" % phrase
         else:
             return "a %s" % phrase

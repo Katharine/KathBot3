@@ -1404,7 +1404,7 @@ def message(irc, channel, origin, command, args):
     elif command == 'zload':
         try:
             terminate_machine(irc.network.name, channel)
-            launch_machine(irc, channel, args[0])
+            launch_machine(irc, channel, ' '.join(args) + '.z3')
         except Exception, message:
             m('irc_helpers').message(irc, channel, "Error launching Z-Machine: %s" % message)
 
@@ -1412,7 +1412,7 @@ def privmsg(irc, origin, args):
     target = args[0]
     if target[0] != '#':
         target = origin.nick
-    if args[1][0] == '>':
+    if args[1][0] == '>' or args[1][0] == '#':
         process_machine_message(irc.network.name, target, args[1][1:].strip())
     
         

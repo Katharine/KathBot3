@@ -9,7 +9,7 @@ def shutdown():
     m('webserver').remove_handlers()
 
 def addquote(nick, quote):
-    m('datastore').execute("INSERT INTO quotes (quote, nick) VALUES (?, ?)", quote, nick)
+    return m('datastore').query("INSERT INTO quotes (quote, nick) VALUES (?, ?)", quote, nick)
 
 def getquote(number=None, search=None):
     query = "SELECT id, quote, nick, added FROM quotes %s ORDER BY %s LIMIT ?,1"
@@ -38,8 +38,8 @@ def message(irc, channel, origin, command, args):
     if command == 'addquote':
         nick = origin.nick
         nick = m('security').get_canonical_nick(nick)
-        addquote(origin.nick, ' '.join(args).replace("\\n", "\n"))
-        irc_helpers.message(irc, channel, "Added quote from %s." % nick)
+        qid = addquote(origin.nick, ' '.join(args).replace("\\n", "\n"))
+        irc_helpers.message(irc, channel, "Added quote %i from %s." % (qid, nick))
     elif command == 'quote':
         number = None
         search = None
