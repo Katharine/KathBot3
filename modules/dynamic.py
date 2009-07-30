@@ -1,5 +1,6 @@
 # encoding=utf-8
 # Warning: this is very ugly.
+# 30/7/09 - now it's *really* ugly.
 from __future__ import division
 import random
 import timelib # http://pypi.python.org/pypi/timelib/
@@ -8,7 +9,7 @@ import os
 import math
 import textwrap
 
-PARENT_TAGS = ('if', 'else', 'choose', 'choice', 'c', 'set', 'try', 'length', 'indefinite', 'indef', 'capitalise', 'math', 'repeat', 'while', 'get')
+PARENT_TAGS = ('if', 'else', 'choose', 'choice', 'c', '|', 'set', 'try', 'length', 'indefinite', 'indef', 'capitalise', 'math', 'repeat', 'while', 'get', 'func')
 
 class ParseError(Exception): pass
 
@@ -86,11 +87,21 @@ def parse_tree(line):
                         current_node = current_node.parent
                     elif node.name == 'if' and current_node.name == 'else' and current_node.parent and current_node.parent.name == 'if':
                         current_node = current_node.parent.parent
+                    elif current_node.name == '|' and node.name == 'choose':
+                        current_node = current_node.parent.parent
                     else:
                         raise ParseError, "Mismatched closing [/%s]; expecting [/%s]." % (node.name, current_node.name)
                 else:
-                    current_node.add_child(node)
-                    current_node = node
+                    if node.name == 'choose':
+                        hack = ParseNode(name='|')
+                        node.add_child(hack)
+                        current_node.add_child(node)
+                        current_node = hack
+                    else:
+                        if current_node.name == '|' and node.name == '|':
+                            current_node = current_node.parent
+                        current_node.add_child(node)
+                        current_node = node
             else:
                 current_node.add_child(node)
             current_part = ''
@@ -109,6 +120,24 @@ def treelevel(node, irc, origin, args, channel, variables):
     for child in node.children:
         value += stringify(dotree(child, irc, origin, args, channel, variables))
     return value
+
+def get_var(name, irc, origin, args, channel, variables, attribute=''):
+    if name in variables:
+        value = variables[name]
+        if isinstance(value, ParseNode):
+            oldattr = variables.get('attr')
+            attr = get_var(attribute, irc, origin, args, channel, variables) # Functions can have variables as args.
+            if attr is not None:
+                variables['attr'] = attr
+            else:
+                variables['attr'] = attribute
+            output = treelevel(value, irc, origin, args, channel, variables)
+            variables['attr'] = oldattr
+            return output
+        else:
+            return value
+    else:
+        return None
 
 def dotree(node, irc, origin, args, channel, variables=None):
     if isinstance(node, StringNode):
@@ -135,7 +164,6 @@ def dotree(node, irc, origin, args, channel, variables=None):
         variables = {
             'nick': origin.nick,
             'hostname': origin.hostname,
-            'args': ' '.join(args),
             'argcount': len(args),
             '__builtins__': None, # Disable the builtin functions.
         }
@@ -152,7 +180,7 @@ def dotree(node, irc, origin, args, channel, variables=None):
         for i in range(0, len(args)):
             variables['arg%s' % i] = args[i]
 
-    if node.name in ('root', 'else', 'choice', 'c'):
+    if node.name in ('root', 'else', 'choice', 'c', '|'):
         value = ''
         for child in node.children:
             value += stringify(dotree(child, irc, origin, args, channel, variables))
@@ -161,8 +189,9 @@ def dotree(node, irc, origin, args, channel, variables=None):
     
     
     # Do something useful with this node.
-    if node.name in variables:
-        return variables[node.name]
+    value = get_var(node.name, irc, origin, args, channel, variables, node.attribute)
+    if value is not None:
+        return value
     elif node.name == 'if':
         try:
             test = eval(node.attribute, variables)
@@ -204,9 +233,9 @@ def dotree(node, irc, origin, args, channel, variables=None):
         return ']'
     elif node.name == 'repeat':
         try:
-            if node.attribute in variables:
-                times = int(variables[node.attribute])
-                
+            value = get_var(node.attribute, irc, origin, args, channel, variables)
+            if value is not None:
+                times = int(value)
             else:
                 times = int(node.attribute)
         except Exception, message:
@@ -214,11 +243,25 @@ def dotree(node, irc, origin, args, channel, variables=None):
         if times > 25:
             raise ParseError, "Excessively large numbers of repeats are forbidden."
         variables['counter'] = 0
+        counter = 0
         value = ''
-        while variables['counter'] < times:
+        while counter < times:
             variables['counter'] += 1
+            counter += 1
             value += treelevel(node, irc, origin, args, channel, variables)
         return value
+    elif node.name == 'args':
+        try:
+            if not node.attribute:
+                return ' '.join(args)
+            else:
+                if ':' not in node.attribute:
+                    return args[int(node.attribute)]
+                else:
+                    start, finish = node.attribute.split(':')
+                    return ' '.join(args[int(start):int(finish)])
+        except:
+            return '~B[bad arg numbers %s]~B' % node.attribute
     elif node.name == 'while':
         try:
             counter = 0
@@ -243,10 +286,11 @@ def dotree(node, irc, origin, args, channel, variables=None):
     elif node.name == 'countup':
         return timediff(datetime.datetime.utcnow() - timelib.strtodatetime(node.attribute))
     elif node.name == 'choose':
-        real_children = []
-        for child in node.children:
-            if child.name != '|':
-                real_children.append(child)
+        # Deal with the old [c]..[/c] format.
+        if len(node.children) == 1 and node.children[0].name == '|':
+            real_children = node.children[0].children
+        else:
+            real_children = node.children
         return dotree(random.choice(real_children), irc, origin, args, channel, variables)
     elif node.name == 'noun':
         word = word_from_file('data/nouns')
@@ -315,10 +359,14 @@ def dotree(node, irc, origin, args, channel, variables=None):
             except ModuleNotLoaded:
                 return origin.nick
     elif node.name == 'try':
-        if node.attribute in variables:
-            return variables[node.attribute]
+        value = get_var(node.attribute, irc, origin, args, channel, variables)
+        if value is not None:
+            return value
         else:
             return treelevel(node, irc, origin, args, channel, variables)
+    elif node.name == 'func':
+        variables[node.attribute] = node
+        return ''
     elif node.name == 'set':
         variables[node.attribute] = treelevel(node, irc, origin, args, channel, variables)
         try:
@@ -333,10 +381,7 @@ def dotree(node, irc, origin, args, channel, variables=None):
         return ''
     elif node.name == 'get':
         name = treelevel(node, irc, origin, args, channel, variables)
-        if name in variables:
-            return variables[name]
-        else:
-            return 'None'
+        return stringify(get_var(name, irc, origin, args, channel, variables, node.attribute))
     elif node.name == 'length':
         return stringify(len(treelevel(node, irc, origin, args, channel, variables)))
     elif node.name == 'capitalise':
@@ -399,6 +444,7 @@ def format_source(node):
     depth = 1
     temp = node
     while temp.parent is not None:
+        #if temp.name != '|' or temp is node:
         depth += 1
         temp = temp.parent
     
@@ -406,14 +452,15 @@ def format_source(node):
         attribute = ' ' + node.attribute
     else:
         attribute = ''
-    if node.name != 'root':
+    if node.name != 'root' and (node.name != '|' or node.parent.children[0] is not node):
         value = '~B\x03%s[%s%s]\x03~B' % (depth, node.name, attribute)
     else:
         value = ''
     if node.children:
+        first = True
         for child in node.children:
             value += format_source(child)
-        if node.name != 'root':
+        if node.name != 'root' and node.name != '|':
             value += '~B\x03%s[/%s]\x03~B' % (depth, node.name)
         return value
     else:
@@ -478,7 +525,10 @@ def message(irc, channel, origin, command, args):
                 else:
                     irc_helpers.message(irc, channel, "The command ~B%s~B does not exist." % args[0])
         elif command == 'eval':
-            irc_helpers.message(irc, channel, parseline(irc, origin, args, channel, ' '.join(args)))
+            try:
+                irc_helpers.message(irc, channel, parseline(irc, origin, args, channel, ' '.join(args).replace(r'\n', '\n')))
+            except ParseError, error:
+                irc_helpers.message(irc, channel, "%s" % error)
     else:
         source = find_command(command)
         if source is not None:
