@@ -607,14 +607,12 @@ def word_from_file(path):
     pos = random.randint(0, size - 1)
     f = open(path)
     f.seek(pos)
-    while f.tell() != 0 and f.read(1) != "\n": pass
+    while f.read(1) != "\n":
+        f.seek(-2, os.SEEK_CUR)
     word = ''
-    try:
-        while True:
-            char = f.read(1)
-            if char == "\n":
-                break
-            word += char
-    except EOFError:
-        pass
+    while True:
+        char = f.read(1)
+        if char == "\n" or char == "":
+            break
+        word += char
     return word.strip()
