@@ -28,6 +28,7 @@ def connected(irc, origin, args):
 def nick(irc, origin, args):
     if origin.nick == irc.nick:
         irc.nick = args[0]
+        logger.info("Changed nick on %s from %s to %s" % (irc.network, origin.nick, irc.nick))
 
 def nick_taken(irc, origin, args):
     try:
@@ -40,6 +41,7 @@ def nick_taken(irc, origin, args):
     else:
         irc.nick = irc.network.nicks[pos]
         irc.raw("NICK %s" % irc.nick)
+        logger.info("Trying new nick %s for %s; last attempt already taken." % (irc.nick, irc.network))
 
 def privmsg(irc, origin, args):
     try:
