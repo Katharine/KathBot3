@@ -43,11 +43,10 @@ class RunHook(threading.Thread):
             logging.warn("Aborted hook %s due to looping failure: %s" % (self.hook, message))
 
 def get_module(module_name):
-    module = mods.get(module_name)
-    if not module:
+    if module_name not in mods:
         raise ModuleNotLoaded, "%s is not loaded." % module_name
     
-    return module
+    return mods[module_name]
 
 def load_module(module):
     if mods.get(module):

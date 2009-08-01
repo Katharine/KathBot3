@@ -42,14 +42,6 @@ def privmsg(irc, origin, args):
         args = args[2:]
         if command == 'ping':
             irc_helpers.message(irc, target, "PONG!")
-        elif command == 'load':
-            for module in args:
-                try:
-                    modules.load_module(module)
-                except Exception, msg:
-                    irc_helpers.message(irc, target, "Couldn't load %s: %s." % (module, msg))
-                else:
-                    irc_helpers.message(irc, target, "Loaded %s" % module)
         elif command == 'unload':
             for module in args:
                 try:
@@ -57,15 +49,16 @@ def privmsg(irc, origin, args):
                     irc_helpers.message(irc, target, "Unloaded %s" % module)
                 except ModuleNotLoaded:
                     irc_helpers.message(irc, target, "Couldn't unload %s; it's not loaded." % module)
-        elif command == 'reload':
+        elif command == 'load' or command == 'reload':
             for module in args:
                 try:
-                    modules.unload_module(module)
+                    if module in modules.mods:
+                        modules.unload_module(module)
                     modules.load_module(module)
                 except Exception, msg:
-                    irc_helpers.message(irc, target, "Couldn't reload %s: %s" % (module, msg))
+                    irc_helpers.message(irc, target, "Couldn't load %s: %s" % (module, msg))
                 else:
-                    irc_helpers.message(irc, target, "Reloaded %s" % module)
+                    irc_helpers.message(irc, target, "Loaded %s" % module)
         elif command == 'raw':
             irc.raw(' '.join(args))
             irc_helpers.message(irc, target, "Sent message.")
