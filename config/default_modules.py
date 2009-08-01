@@ -19,6 +19,7 @@ modules = (
     'reference',
     'supposedlyfunny',
     'datastoreirc',
+    'todo',
     #'lastfm',
     #'irclogger'
 )
