@@ -1,5 +1,6 @@
 # encoding=utf-8
 import datetime
+from xml.sax.saxutils import escape as escapehtml
 
 def init():
     add_hook('message', message)
@@ -93,7 +94,7 @@ def quotes_page(request):
 """
         return output
     else:
-        return '<div class="quote">%s</div>' % getquote(number=int(parts[1])).quote.replace("\n", "<br />")
+        return '<div class="quote">%s</div>' % escapehtml(getquote(number=int(parts[1])).quote).replace("\n", "<br />")
     
 class Quote(object):
     nick = ''

@@ -28,10 +28,16 @@ def message(irc, channel, origin, command, args):
         m('datastore').execute("INSERT INTO hosts (uid, host) VALUES (?, ?)", userid, host)
         irc_helpers.message(irc, channel, "Added user %s with access level %s." % (nick, level));
     elif command == 'cmdaccess':
-        command = args[0]
+        cmd = args[0]
         level = int(args[1])
-        m('datastore').execute("REPLACE INTO command_access (command, level) VALUES (?, ?)", command, level)
-        irc_helpers.message(irc, channel, "Set access level for ~B%s~B to ~B%s~B." % (command, level))
+        m('datastore').execute("REPLACE INTO command_access (command, level) VALUES (?, ?)", cmd, level)
+        irc_helpers.message(irc, channel, "Set access level for ~B%s~B to ~B%s~B." % (cmd, level))
+    elif command == 'level':
+        if len(args) == 0:
+            irc_helpers.message(irc, channel, "Being that we live in a totalitarian state, you need level ~B4~B clearance to ~Bdo nothing~B.")
+        else:
+            level = get_command_access(args[0])
+            irc_helpers.message(irc, channel, "Access level for ~B%s~B is ~B%s~B" % (args[0], level))
     elif command == 'addhost':
         host = args[0]
         uid = get_user_id(origin)
@@ -44,7 +50,7 @@ def message(irc, channel, origin, command, args):
         alias = args[0]
         uid = get_user_id(origin)
         if uid is not None:
-            m('datastore').execute("INSERT INTO aliases (alias, canon) VALUES (?, ?)", alias, origin.nick)
+            m('datastore').execute("INSERT INTO aliases (alias, canon) VALUES (?, ?)", alias, get_canonical_nick(origin.nick))
             irc_helpers.message(irc, channel, "Added new alias.")
         else:
             irc_helpers.message(irc, channel, "You need to actually have an account for that to work.")

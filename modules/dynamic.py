@@ -165,6 +165,7 @@ def dotree(node, irc, origin, args, channel, variables=None):
             'nick': origin.nick,
             'hostname': origin.hostname,
             'argcount': len(args),
+            'channel': channel,
             '__builtins__': None, # Disable the builtin functions.
         }
         if channel[0] == '#':
@@ -209,7 +210,7 @@ def dotree(node, irc, origin, args, channel, variables=None):
                 if child.name == 'else':
                     value += stringify(dotree(child, irc, origin, args, channel, variables))
             return value
-    # include / import courtesy Selig.
+    # include courtesy Selig.
     elif node.name == 'include':
         source = find_command(node.attribute)
         try:
@@ -220,12 +221,9 @@ def dotree(node, irc, origin, args, channel, variables=None):
         return "~B[Could not include: %s]~B" % node.attribute
     elif node.name == 'import':
         source = find_command(node.attribute)
-        try:
-            if source is not None:
-                dotree(parse_tree(source), irc, origin, args, channel, variables);
-                return "";
-        except:
-            return ""
+        if source is not None:
+            variables[node.attribute] = parse_tree(source)
+            return "";
         return "~B[Could not import: %s]~B" % node.attribute
     elif node.name == 'l':
         return '['
@@ -278,7 +276,9 @@ def dotree(node, irc, origin, args, channel, variables=None):
     elif node.name == 'random':
         r = node.attribute.split(':')
         try:
-            return stringify(random.randint(int(r[0]), int(r[1])))
+            a = get_var(r[0], irc, origin, args, channel, variables)
+            b = get_var(r[1], irc, origin, args, channel, variables)
+            return stringify(random.randint(int(a or r[0]), int(b or r[1])))
         except:
             raise ParseError, "[random a:b] requires two integers a and b (a <= result <= b)"
     elif node.name == 'countdown':
@@ -348,6 +348,8 @@ def dotree(node, irc, origin, args, channel, variables=None):
         return word_from_file('data/adverbs')
     elif node.name == 'interjection':
         return word_from_file('data/interjections')
+    elif node.name == 'place':
+        return word_from_file('data/places')
     elif node.name == '|':
         return ''
     elif node.name == 'rnick':
@@ -444,7 +446,6 @@ def format_source(node):
     depth = 1
     temp = node
     while temp.parent is not None:
-        #if temp.name != '|' or temp is node:
         depth += 1
         temp = temp.parent
     
