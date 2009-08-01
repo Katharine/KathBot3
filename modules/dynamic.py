@@ -505,7 +505,7 @@ def message(irc, channel, origin, command, args):
                     return
                 source = original + ' '.join(args[1:])
                 m('datastore').execute("UPDATE dynamic SET source = ? WHERE command = ?", source, c)
-                irc_helpers.messagechannel
+                irc_helpers.message(irc, channel, "Updated ~B%s~B." % c)
         elif command == 'delete':
             if len(args) != 1:
                 irc_helpers.message(irc, channel, "You must specify what you want to delete.")
