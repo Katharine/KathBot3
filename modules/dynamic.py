@@ -211,259 +211,15 @@ def dotree(node, context):
         return value
     
     # If we have a locally defined function for a tag, call that.
-    if "tag_%s" % node.name in locals():
-        return locals()[node.name](node, context)
+    if "tag_%s" % node.name in globals():
+        return globals()['tag_%s' % node.name](node, context)
     
     # If we have a tag registered by another module, try that.
     if node.name in registered_tags:
         return registered_tags[node.name](node, context)
     
-    # Any code beyond this point should be refactored.
-    if node.name == 'if':
-        try:
-            test = eval(node.attribute, context.variables)
-        except NameError:
-            test = False
-        if test:
-            value = ''
-            for child in node.children:
-                if child.name != 'else':
-                    value += stringify(dotree(child, context))
-            return value
-        else:
-            value = ''
-            for child in node.children:
-                if child.name == 'else':
-                    value += stringify(dotree(child, context))
-            return value
-    # include courtesy Selig.
-    elif node.name == 'include':
-        source = find_command(node.attribute)
-        try:
-            if source is not None:
-                return stringify(dotree(parse_tree(source), context))
-        except:
-            return ""
-        return "~B[Could not include: %s]~B" % node.attribute
-    elif node.name == 'import':
-        source = find_command(node.attribute)
-        if source is not None:
-            variables[node.attribute] = parse_tree(source)
-            return "";
-        return "~B[Could not import: %s]~B" % node.attribute
-    elif node.name == 'l':
-        return '['
-    elif node.name == 'r':
-        return ']'
-    elif node.name == 'repeat':
-        try:
-            value = get_var(node.attribute, context)
-            if value is not None:
-                times = int(value)
-            else:
-                times = int(node.attribute)
-        except Exception, message:
-            raise ParseError, "[random repeats] requires repeats to be an integer greater than zero. (%s)" % message
-        if times > 25:
-            raise ParseError, "Excessively large numbers of repeats are forbidden."
-        context.variables['counter'] = 0
-        counter = 0
-        value = ''
-        while counter < times:
-            context.variables['counter'] += 1
-            counter += 1
-            value += treelevel(node, context)
-        return value
-    elif node.name == 'args':
-        try:
-            if not node.attribute:
-                return ' '.join(context.args)
-            else:
-                if ':' not in node.attribute:
-                    return context.args[int(node.attribute)]
-                else:
-                    start, finish = node.attribute.split(':')
-                    return ' '.join(context.args[int(start):int(finish)])
-        except:
-            return '~B[bad arg numbers %s]~B' % node.attribute
-    elif node.name == 'while':
-        try:
-            counter = 0
-            value = ''
-            while eval(node.attribute, context.variables):
-                value += treelevel(node, context)
-                counter += 1
-                if counter >= 50:
-                    value += '~B[excessive looping; abandoning]~B'
-                    break
-            return value
-        except (NameError, SyntaxError):
-            return "~B[bad while loop]~B"    
-    elif node.name == 'random':
-        r = node.attribute.split(':')
-        try:
-            a = get_var(r[0], context)
-            b = get_var(r[1], context)
-            return stringify(random.randint(int(a or r[0]), int(b or r[1])))
-        except:
-            raise ParseError, "[random a:b] requires two integers a and b (a <= result <= b)"
-    elif node.name == 'countdown':
-        return timediff(timelib.strtodatetime(node.attribute) - datetime.datetime.utcnow())
-    elif node.name == 'countup':
-        return timediff(datetime.datetime.utcnow() - timelib.strtodatetime(node.attribute))
-    elif node.name == 'choose':
-        # Deal with the old [c]..[/c] format.
-        if len(node.children) == 1 and node.children[0].name == '|':
-            real_children = node.children[0].children
-        else:
-            real_children = node.children
-        return dotree(random.choice(real_children), context)
-    elif node.name == 'noun':
-        word = word_from_file('data/nouns')
-        if node.attribute == 'plural':
-            vowels = 'aeiou'
-            if word[-1] == 'y' and word[-2] not in vowels:
-                return "%sies" % word[0:-1]
-            elif word[-1] == 's':
-                return "%ses" % word
-            else:
-                return "%ss" % word
-        else:
-            return word
-    elif node.name == 'verb':
-        verb = word_from_file('data/verbs')
-        tense = node.attribute or 'root'
-        if verb.find('|') != -1:
-            # Figure out what we're going to do about this later...
-            pass
-        else:
-            if tense == 'root':
-                return verb
-            elif tense == 'first' or tense == 'second':
-                return verb
-            elif tense == 'third':
-                if verb[-1] in 'szx' or verb[-2:] in ('ch', 'sh'):
-                    return '%ses' % verb
-                elif verb[-1] == 'y' and verb[-2] not in 'aeiou':
-                    return '%sies' % verb[:-1]
-                else:
-                    return '%ss' % verb
-            else:
-                if verb[-1] not in 'aeiouy' and verb[-2] in 'aeiou':
-                    # This check sucks.
-                    if (len(verb) == 3 or (len(verb) == 4 and verb[-1] == 'p')):
-                        verb += verb[-1]
-                
-                if tense == 'pastpart' or tense == 'past':
-                    if verb[-1] == 'e':
-                        return '%sd' % verb
-                    elif verb[-1] == 'y' and verb[-2] not in 'aeiou':
-                        return '%sied' % verb[:-1]
-                    else:
-                        return '%sed' % verb
-                elif tense == 'presentpart' or tense == 'gerund':
-                    if verb[-1] == 'e':
-                        return '%sing' % verb[:-1]
-                    else:
-                        return '%sing' % verb
-                else:
-                    return '~B[unknown tense "%s"]~B' % tense
-    elif node.name == 'adjective':
-        return word_from_file('data/adjectives')
-    elif node.name == 'adverb':
-        return word_from_file('data/adverbs')
-    elif node.name == 'interjection':
-        return word_from_file('data/interjections')
-    elif node.name == 'place':
-        return word_from_file('data/places')
-    elif node.name == '|':
-        return ''
-    elif node.name == 'rnick':
-        if context.channel[0] != '#':
-            return random.choice((context.irc.nick, context.channel))
-        else:
-            try:
-                return random.choice(m('chantrack').network(context.irc)[context.channel].users.values()).nick
-            except ModuleNotLoaded:
-                return context.origin.nick
-    elif node.name == 'try':
-        value = get_var(node.attribute, context)
-        if value is not None:
-            return value
-        else:
-            return treelevel(node, context)
-    elif node.name == 'func':
-        context.variables[node.attribute] = node
-        return ''
-    elif node.name == 'set':
-        context.variables[node.attribute] = treelevel(node, context)
-        try:
-            intvar = int(context.variables[node.attribute])
-            floatvar = float(context.variables[node.attribute])
-            if abs(intvar - floatvar) < 0.00001:
-                context.variables[node.attribute] = intvar
-            else:
-                context.variables[node.attribute] = floatvar
-        except:
-            pass
-        return ''
-    elif node.name == 'get':
-        name = treelevel(node, context)
-        return stringify(get_var(name, context, node.attribute))
-    elif node.name == 'length':
-        return stringify(len(treelevel(node, context)))
-    elif node.name == 'capitalise':
-        contents = treelevel(node, context)
-        if node.attribute == '' or node.attribute == 'first':
-            if len(contents) > 0:
-                contents = contents[0].upper() + contents[1:]
-        elif node.attribute == 'words':
-            words = contents.split(' ')
-            contents = ''
-            for word in words:
-                contents += word[0].upper() + word[1:] + ' '
-            return contents.strip()
-        elif node.attribute == 'all':
-            return contents.upper()
-        else:
-            return contents
-        return contents
-    elif node.name == 'indefinite' or node.name == 'indef':
-        phrase = treelevel(node, context)
-        if phrase[0].lower() in 'aeiou':
-            return "an %s" % phrase
-        else:
-            return "a %s" % phrase
-    elif node.name == 'math':
-        expression = treelevel(node, context)
-        try:
-            math_functions = {
-                'pow': pow,
-                'ceil': math.ceil,
-                'floor': math.floor,
-                'round': round,
-                'sin': lambda theta: math.sin(math.radians(theta)),
-                'cos': lambda theta: math.cos(math.radians(theta)),
-                'tan': lambda theta: math.tan(math.radians(theta)),
-                'asin': lambda x: math.degrees(math.asin(x)),
-                'acos': lambda x: math.degrees(math.acos(x)),
-                'atan': lambda x: math.degrees(math.atan(x)),
-                'log': math.log,
-                'ln': lambda a: math.log(a),
-                'log10': math.log10,
-                'e': math.e,
-                'pi': math.pi,
-                'sqrt': math.sqrt,
-                '__builtins__': None,
-            }
-            result = eval(expression, math_functions, context.variables)
-            if abs(result) < 0.000000001 and result != 0:
-                result = 0.0
-            return stringify(result)
-        except:
-            return '~B[unsolvable sums]~B'
-    else:
-        return "~B[unknown tag '%s']~B" % node.name
+    # If we get here, it's not a tag.
+    return "~B[unknown tag '%s']~B" % node.name
 
 def format_source(node):
     if isinstance(node, StringNode):
@@ -643,3 +399,272 @@ def word_from_file(path):
             break
         word += char
     return word.strip()
+
+# Tag defintions
+
+def tag_if(node, context):
+    try:
+        test = eval(node.attribute, context.variables)
+    except NameError:
+        test = False
+    if test:
+        value = ''
+        for child in node.children:
+            if child.name != 'else':
+                value += stringify(dotree(child, context))
+        return value
+    else:
+        value = ''
+        for child in node.children:
+            if child.name == 'else':
+                value += stringify(dotree(child, context))
+        return value 
+
+# Thanks to Selig.
+def tag_include(node, context):
+    source = find_command(node.attribute)
+    try:
+        if source is not None:
+            return stringify(dotree(parse_tree(source), context))
+    except:
+        return ""
+    return "~B[Could not include: %s]~B" % node.attribute
+
+def tag_import(node, context):
+    source = find_command(node.attribute)
+    if source is not None:
+        variables[node.attribute] = parse_tree(source)
+        return "";
+    return "~B[Could not import: %s]~B" % node.attribute
+    
+def tag_l(node, context):
+    return '['
+
+def tag_r(node, context):
+    return ']'
+
+def tag_repeat(node, context):
+    try:
+        value = get_var(node.attribute, context)
+        if value is not None:
+            times = int(value)
+        else:
+            times = int(node.attribute)
+    except Exception, message:
+        raise ParseError, "[random repeats] requires repeats to be an integer greater than zero. (%s)" % message
+    if times > 25:
+        raise ParseError, "Excessively large numbers of repeats are forbidden."
+    context.variables['counter'] = 0
+    counter = 0
+    value = ''
+    while counter < times:
+        context.variables['counter'] += 1
+        counter += 1
+        value += treelevel(node, context)
+    return value
+
+def tag_args(node, context):
+    try:
+        if not node.attribute:
+            return ' '.join(context.args)
+        else:
+            if ':' not in node.attribute:
+                return context.args[int(node.attribute)]
+            else:
+                start, finish = node.attribute.split(':')
+                return ' '.join(context.args[int(start):int(finish)])
+    except:
+        return '~B[bad arg numbers %s]~B' % node.attribute
+
+def tag_while(node, context):
+    try:
+        counter = 0
+        value = ''
+        while eval(node.attribute, context.variables):
+            value += treelevel(node, context)
+            counter += 1
+            if counter >= 50:
+                value += '~B[excessive looping; abandoning]~B'
+                break
+        return value
+    except (NameError, SyntaxError):
+        return "~B[bad while loop]~B"  
+
+def tag_random(node, context):
+    r = node.attribute.split(':')
+    try:
+        a = get_var(r[0], context)
+        b = get_var(r[1], context)
+        return stringify(random.randint(int(a or r[0]), int(b or r[1])))
+    except:
+        raise ParseError, "[random a:b] requires two integers a and b (a <= result <= b)"
+
+def tag_countdown(node, context):
+    return timediff(timelib.strtodatetime(node.attribute) - datetime.datetime.utcnow())
+
+def tag_countup(node, context):
+    return timediff(datetime.datetime.utcnow() - timelib.strtodatetime(node.attribute))
+
+def tag_choose(node, context):
+    # Deal with the old [c]..[/c] format.
+        if len(node.children) == 1 and node.children[0].name == '|':
+            real_children = node.children[0].children
+        else:
+            real_children = node.children
+        return dotree(random.choice(real_children), context)
+
+def tag_noun(node, context):
+    word = word_from_file('data/nouns')
+    if node.attribute == 'plural':
+        vowels = 'aeiou'
+        if word[-1] == 'y' and word[-2] not in vowels:
+            return "%sies" % word[0:-1]
+        elif word[-1] == 's':
+            return "%ses" % word
+        else:
+            return "%ss" % word
+    else:
+        return word
+
+def tag_verb(node, context):
+    verb = word_from_file('data/verbs')
+    tense = node.attribute or 'root'
+    if tense == 'root':
+        return verb
+    elif tense == 'first' or tense == 'second':
+        return verb
+    elif tense == 'third':
+        if verb[-1] in 'szx' or verb[-2:] in ('ch', 'sh'):
+            return '%ses' % verb
+        elif verb[-1] == 'y' and verb[-2] not in 'aeiou':
+            return '%sies' % verb[:-1]
+        else:
+            return '%ss' % verb
+    else:
+        if verb[-1] not in 'aeiouy' and verb[-2] in 'aeiou':
+            # This check sucks.
+            if (len(verb) == 3 or (len(verb) == 4 and verb[-1] == 'p')):
+                verb += verb[-1]
+        
+        if tense == 'pastpart' or tense == 'past':
+            if verb[-1] == 'e':
+                return '%sd' % verb
+            elif verb[-1] == 'y' and verb[-2] not in 'aeiou':
+                return '%sied' % verb[:-1]
+            else:
+                return '%sed' % verb
+        elif tense == 'presentpart' or tense == 'gerund':
+            if verb[-1] == 'e':
+                return '%sing' % verb[:-1]
+            else:
+                return '%sing' % verb
+        else:
+            return '~B[unknown tense "%s"]~B' % tense
+
+def tag_adjective(node, context):
+    return word_from_file('data/adjectives')
+
+def tag_adverb(node, context):
+    return word_from_file('data/adverbs')
+
+def tag_interjection(node, context):
+    return word_from_file('data/interjections')
+
+def tag_place(node, context):
+        return word_from_file('data/places')
+
+def tag_rnick(node, context):
+    if context.channel[0] != '#':
+        return random.choice((context.irc.nick, context.channel))
+    else:
+        try:
+            return random.choice(m('chantrack').network(context.irc)[context.channel].users.values()).nick
+        except ModuleNotLoaded:
+            return context.origin.nick
+
+def tag_try(node, context):
+    value = get_var(node.attribute, context)
+    if value is not None:
+        return value
+    else:
+        return treelevel(node, context)
+
+def tag_func(node, context):
+    context.variables[node.attribute] = node
+    return ''
+
+def tag_set(node, context):
+    context.variables[node.attribute] = treelevel(node, context)
+    try:
+        intvar = int(context.variables[node.attribute])
+        floatvar = float(context.variables[node.attribute])
+        if abs(intvar - floatvar) < 0.00001:
+            context.variables[node.attribute] = intvar
+        else:
+            context.variables[node.attribute] = floatvar
+    except:
+        pass
+    return ''
+
+def tag_get(node, context):
+    name = treelevel(node, context)
+    return stringify(get_var(name, context, node.attribute))
+
+def tag_length(node, context):
+    return stringify(len(treelevel(node, context)))
+
+def tag_capitalise(node, context):
+    contents = treelevel(node, context)
+    if node.attribute == '' or node.attribute == 'first':
+        if len(contents) > 0:
+            contents = contents[0].upper() + contents[1:]
+    elif node.attribute == 'words':
+        words = contents.split(' ')
+        contents = ''
+        for word in words:
+            contents += word[0].upper() + word[1:] + ' '
+        return contents.strip()
+    elif node.attribute == 'all':
+        return contents.upper()
+    else:
+        return contents
+    return contents
+
+def tag_indefinite(node, context):
+    phrase = treelevel(node, context)
+    if phrase[0].lower() in 'aeiou':
+        return "an %s" % phrase
+    else:
+        return "a %s" % phrase
+
+def tag_indef(node, context):
+    return tag_indefinite(node, context)
+
+def tag_math(node, context):
+    expression = treelevel(node, context)
+    try:
+        math_functions = {
+            'pow': pow,
+            'ceil': math.ceil,
+            'floor': math.floor,
+            'round': round,
+            'sin': lambda theta: math.sin(math.radians(theta)),
+            'cos': lambda theta: math.cos(math.radians(theta)),
+            'tan': lambda theta: math.tan(math.radians(theta)),
+            'asin': lambda x: math.degrees(math.asin(x)),
+            'acos': lambda x: math.degrees(math.acos(x)),
+            'atan': lambda x: math.degrees(math.atan(x)),
+            'log': math.log,
+            'ln': lambda a: math.log(a),
+            'log10': math.log10,
+            'e': math.e,
+            'pi': math.pi,
+            'sqrt': math.sqrt,
+            '__builtins__': None,
+        }
+        result = eval(expression, math_functions, context.variables)
+        if abs(result) < 0.000000001 and result != 0:
+            result = 0.0
+        return stringify(result)
+    except:
+        return '~B[unsolvable sums]~B'
