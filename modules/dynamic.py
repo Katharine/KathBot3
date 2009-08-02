@@ -15,6 +15,7 @@ registered_tags = {} # tag => callback
 module_registrations = {} # module => list
 
 class ParseError(Exception): pass
+class TagAlreadyExists(Exception): pass
 
 class ParseNode(object):
     name = ''
@@ -265,10 +266,30 @@ def format_source(node):
 
 def init():
     add_hook('message', message)
+    add_hook('unloaded', unloaded)
     try:
         m('webserver').add_handler('GET', weblist)
     except ModuleNotLoaded:
         pass
+
+def add_tag(tag, handler, parent=False):
+    if tag in registered_tags or 'tag_%s' % tag in globals():
+        raise TagAlreadyExists
+    module = get_calling_module()
+    registered_tags[tag] = handler
+    if parent:
+        parent_tags.add(tag)
+    if module not in module_registrations:
+        module_registrations[module] = []
+    module_registrations[module].append(tag)
+
+def unloaded(module):
+    if module in module_registrations:
+        for tag in module_registrations[module]:
+            del registered_tags[tag]
+            if tag in parent_tags:
+                parent_tags.remove(tag)
+        del module_registrations[module]
 
 def find_command(command):
     result = m('datastore').query("SELECT source FROM dynamic WHERE command = ?", command)
@@ -424,6 +445,16 @@ def typecast(value):
             return floatvar
     except:
         return value
+
+def get_calling_module():
+    record = inspect.stack()[2][1]
+    filename = os.path.split(record)
+    if filename[1].startswith('__init__.py'):
+        filename = os.path.split(filename[0])
+    
+    module = filename[1].split('.')[0]
+    
+    return module
 
 # Tag defintions
 
