@@ -8,8 +8,12 @@ import urllib2
 import urlparse
 import traceback
 import mimetypes
+import platform
+import socket
 
 web_handlers = {}
+
+PORT_NUMBER = 8765
 
 class KBHTTPServer(BaseHTTPServer.HTTPServer, SocketServer.ThreadingMixIn):
     def shutdown(self):
@@ -90,7 +94,7 @@ class WebServer(threading.Thread):
         threading.Thread.__init__(self, name='httpd')
         self.setDaemon(True)
         
-        self.server = KBHTTPServer(('', 8765), KBHTTPHandler)
+        self.server = KBHTTPServer(('', PORT_NUMBER), KBHTTPHandler)
         self.start()
     
     def run(self):
@@ -114,7 +118,7 @@ def shutdown():
     server.shutdown()
     # This hack lets the server thread *actually* terminate.
     try:
-        f = urllib2.urlopen('http://127.0.0.1:8765/')
+        f = urllib2.urlopen('http://127.0.0.1:%s/' % PORT_NUMBER)
         f.read(1)
         f.close()
     except:
@@ -132,6 +136,11 @@ def remove_handlers():
     module = get_calling_module()
     if module in web_handlers:
         del web_handlers[module]
+
+def get_root_address(cached=[]):
+    if not cached:
+        cached.append('http://%s:%s/' % (socket.gethostbyaddr(socket.gethostname())[0], PORT_NUMBER))
+    return cached[0]
 
 def generate_index_page(request):
     return 'This is the index page.'
