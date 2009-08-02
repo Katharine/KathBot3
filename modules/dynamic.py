@@ -12,6 +12,7 @@ import textwrap
 parent_tags = set(('if', 'else', 'choose', 'choice', 'c', '|', 'set', 'try', 'length', 'indefinite', 'indef', 'capitalise', 'math', 'repeat', 'while', 'get', 'func'))
 grouping_tags = set(('root', 'else', 'choice', 'c', '|'))
 registered_tags = {} # tag => callback
+module_registrations = {} # module => list
 
 class ParseError(Exception): pass
 
@@ -53,7 +54,7 @@ class StringNode(ParseNode):
 
 class TagNode(ParseNode): pass
 
-class TagContext(object):
+class TagContext(dict):
     def __init__(self, irc, origin, args, channel, variables=None):
         self.irc = irc
         self.origin = origin
@@ -63,6 +64,17 @@ class TagContext(object):
         
         if self.variables is None:
             self.create_default_variables()
+    
+    def __getitem__(self, key):
+        if key not in self.variables:
+            return None
+        value = self.variables[key]
+        if isinstance(value, ParseNode):
+            return typecast(treelevel(value, self))
+        return value
+    
+    def keys(self):
+        return self.variables.keys()
     
     def create_default_variables(self):
         simple_args = self.args
@@ -175,8 +187,10 @@ def treelevel(node, context):
         value += stringify(dotree(child, context))
     return value
 
-def get_var(name, context, attribute=''):
-    if name in context.variables:
+def get_var(name, context, attribute=None):
+    if attribute is None:
+        return context[name]
+    elif name in context.variables:
         value = context.variables[name]
         if isinstance(value, ParseNode):
             oldattr = context.variables.get('attr')
@@ -400,11 +414,22 @@ def word_from_file(path):
         word += char
     return word.strip()
 
+def typecast(value):
+    try:
+        intvar = int(value)
+        floatvar = float(value)
+        if abs(intvar - floatvar) < 0.00001:
+            return intvar
+        else:
+            return floatvar
+    except:
+        return value
+
 # Tag defintions
 
 def tag_if(node, context):
     try:
-        test = eval(node.attribute, context.variables)
+        test = eval(node.attribute, context)
     except NameError:
         test = False
     if test:
@@ -480,7 +505,7 @@ def tag_while(node, context):
     try:
         counter = 0
         value = ''
-        while eval(node.attribute, context.variables):
+        while eval(node.attribute, context):
             value += treelevel(node, context)
             counter += 1
             if counter >= 50:
@@ -594,16 +619,7 @@ def tag_func(node, context):
     return ''
 
 def tag_set(node, context):
-    context.variables[node.attribute] = treelevel(node, context)
-    try:
-        intvar = int(context.variables[node.attribute])
-        floatvar = float(context.variables[node.attribute])
-        if abs(intvar - floatvar) < 0.00001:
-            context.variables[node.attribute] = intvar
-        else:
-            context.variables[node.attribute] = floatvar
-    except:
-        pass
+    context.variables[node.attribute] = typecast(treelevel(node, context))
     return ''
 
 def tag_get(node, context):
@@ -662,7 +678,7 @@ def tag_math(node, context):
             'sqrt': math.sqrt,
             '__builtins__': None,
         }
-        result = eval(expression, math_functions, context.variables)
+        result = eval(expression, math_functions, context)
         if abs(result) < 0.000000001 and result != 0:
             result = 0.0
         return stringify(result)
