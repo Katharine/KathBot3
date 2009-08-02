@@ -9,7 +9,9 @@ import os
 import math
 import textwrap
 
-PARENT_TAGS = ('if', 'else', 'choose', 'choice', 'c', '|', 'set', 'try', 'length', 'indefinite', 'indef', 'capitalise', 'math', 'repeat', 'while', 'get', 'func')
+parent_tags = set(('if', 'else', 'choose', 'choice', 'c', '|', 'set', 'try', 'length', 'indefinite', 'indef', 'capitalise', 'math', 'repeat', 'while', 'get', 'func'))
+grouping_tags = set(('root', 'else', 'choice', 'c', '|'))
+registered_tags = {} # tag => callback
 
 class ParseError(Exception): pass
 
@@ -32,7 +34,7 @@ class ParseNode(object):
         self.name = tag[0].lower()
         if self.name[0] == '/':
             self.name = self.name[1:]
-            if not self.name in PARENT_TAGS:
+            if not self.name in parent_tags:
                 raise ParseError, "Unexpected closing tag [/%s], which cannot have children." % self.name
             self.closing = True
         if len(tag) > 1 and tag[1] is not None:
@@ -50,6 +52,57 @@ class StringNode(ParseNode):
         self.attribute = string
 
 class TagNode(ParseNode): pass
+
+class TagContext(object):
+    def __init__(self, irc, origin, args, channel, variables=None):
+        self.irc = irc
+        self.origin = origin
+        self.args = args
+        self.channel = channel
+        self.variables = variables
+        
+        if self.variables is None:
+            self.create_default_variables()
+    
+    def create_default_variables(self):
+        simple_args = self.args
+        args = []
+        in_arg = False
+        for arg in simple_args:
+            if in_arg:
+                if arg[-1] == '"':
+                    args[-1].append(arg[0:-1])
+                    args[-1] = ' '.join(args[-1])
+                    in_arg = False
+                else:
+                    args[-1].append(arg)
+            elif arg[0] == '"':
+                args.append([arg[1:]])
+                in_arg = True
+            else:
+                args.append(arg)
+        self.args = args
+        del args
+        del simple_args
+        self.variables = {
+            'nick': self.origin.nick,
+            'hostname': self.origin.hostname,
+            'argcount': len(self.args),
+            'channel': self.channel,
+            '__builtins__': None, # Disable the builtin functions.
+        }
+        if self.channel[0] == '#':
+            try:
+                chantrack = m('chantrack')
+                self.variables['usercount'] = len(chantrack.network(self.irc)[self.channel].users)
+                self.variables['topic'] = chantrack.network(self.irc)[self.channel].topic
+            except ModuleNotLoaded:
+                pass
+        else:
+            self.variables['usercount'] = 1
+            self.variables['topic'] = 'N/A'
+        for i in range(0, len(self.args)):
+            self.variables['arg%s' % i] = self.args[i]
 
 def stringify(string):
     if isinstance(string, basestring):
@@ -81,7 +134,7 @@ def parse_tree(line):
                 continue
             in_token = False
             node = ParseNode(current_part)
-            if node.name in PARENT_TAGS:
+            if node.name in parent_tags:
                 if node.closing:
                     if node.name == current_node.name:
                         current_node = current_node.parent
@@ -113,109 +166,82 @@ def parse_tree(line):
 
 def parseline(irc, origin, args, channel, line):
     tree = parse_tree(line)
-    return dotree(tree, irc, origin, args, channel)
+    context = TagContext(irc, origin, args, channel)
+    return dotree(tree, context)
 
-def treelevel(node, irc, origin, args, channel, variables):
+def treelevel(node, context):
     value = ''
     for child in node.children:
-        value += stringify(dotree(child, irc, origin, args, channel, variables))
+        value += stringify(dotree(child, context))
     return value
 
-def get_var(name, irc, origin, args, channel, variables, attribute=''):
-    if name in variables:
-        value = variables[name]
+def get_var(name, context, attribute=''):
+    if name in context.variables:
+        value = context.variables[name]
         if isinstance(value, ParseNode):
-            oldattr = variables.get('attr')
-            attr = get_var(attribute, irc, origin, args, channel, variables) # Functions can have variables as args.
+            oldattr = context.variables.get('attr')
+            attr = get_var(attribute, context) # Functions can have variables as args.
             if attr is not None:
-                variables['attr'] = attr
+                context.variables['attr'] = attr
             else:
-                variables['attr'] = attribute
-            output = treelevel(value, irc, origin, args, channel, variables)
-            variables['attr'] = oldattr
+                context.variables['attr'] = attribute
+            output = treelevel(value, context)
+            context.variables['attr'] = oldattr
             return output
         else:
             return value
     else:
         return None
 
-def dotree(node, irc, origin, args, channel, variables=None):
+def dotree(node, context):
+    # Strings are just strings
     if isinstance(node, StringNode):
         return node.attribute
     
-    if variables is None:
-        simple_args = args
-        args = []
-        in_arg = False
-        for arg in simple_args:
-            if in_arg:
-                if arg[-1] == '"':
-                    args[-1].append(arg[0:-1])
-                    args[-1] = ' '.join(args[-1])
-                    in_arg = False
-                else:
-                    args[-1].append(arg)
-            elif arg[0] == '"':
-                args.append([arg[1:]])
-                in_arg = True
-            else:
-                args.append(arg)
-        del simple_args
-        variables = {
-            'nick': origin.nick,
-            'hostname': origin.hostname,
-            'argcount': len(args),
-            'channel': channel,
-            '__builtins__': None, # Disable the builtin functions.
-        }
-        if channel[0] == '#':
-            try:
-                chantrack = m('chantrack')
-                variables['usercount'] = len(chantrack.network(irc)[channel].users)
-                variables['topic'] = chantrack.network(irc)[channel].topic
-            except ModuleNotLoaded:
-                pass
-        else:
-            variables['usercount'] = 1
-            variables['topic'] = 'N/A'
-        for i in range(0, len(args)):
-            variables['arg%s' % i] = args[i]
-
-    if node.name in ('root', 'else', 'choice', 'c', '|'):
+    # Grouping nodes do nothing interesting other than recurse.
+    if node.name in grouping_tags:
         value = ''
         for child in node.children:
-            value += stringify(dotree(child, irc, origin, args, channel, variables))
+            value += stringify(dotree(child, context))
         return value
     
-    
-    
-    # Do something useful with this node.
-    value = get_var(node.name, irc, origin, args, channel, variables, node.attribute)
+    # Variable nodes should be returned immediately
+    value = get_var(node.name, context, node.attribute)
     if value is not None:
         return value
-    elif node.name == 'if':
+    
+    # If we have a locally defined function for a tag, call that.
+    if "tag_%s" % node.name in locals():
+        return locals()[node.name](node, context)
+    
+    # If we have a tag registered by another module, try that.
+    if node.name in registered_tags:
+        return registered_tags[node.name](node, context)
+    
+    # Any code beyond this point should be refactored.
+    if node.name == 'if':
         try:
-            test = eval(node.attribute, variables)
+            test = eval(node.attribute, context.variables)
         except NameError:
             test = False
         if test:
             value = ''
             for child in node.children:
                 if child.name != 'else':
-                    value += stringify(dotree(child, irc, origin, args, channel, variables))
+                    value += stringify(dotree(child, context))
             return value
         else:
             value = ''
             for child in node.children:
                 if child.name == 'else':
-                    value += stringify(dotree(child, irc, origin, args, channel, variables))
+                    value += stringify(dotree(child, context))
             return value
     # include courtesy Selig.
     elif node.name == 'include':
         source = find_command(node.attribute)
         try:
             if source is not None:
-                return stringify(dotree(parse_tree(source), irc, origin, args, channel, variables))
+                return stringify(dotree(parse_tree(source), context))
         except:
             return ""
         return "~B[Could not include: %s]~B" % node.attribute
@@ -231,7 +257,7 @@ def dotree(node, irc, origin, args, channel, variables=None):
         return ']'
     elif node.name == 'repeat':
         try:
-            value = get_var(node.attribute, irc, origin, args, channel, variables)
+            value = get_var(node.attribute, context)
             if value is not None:
                 times = int(value)
             else:
@@ -240,32 +266,32 @@ def dotree(node, irc, origin, args, channel, variables=None):
             raise ParseError, "[random repeats] requires repeats to be an integer greater than zero. (%s)" % message
         if times > 25:
             raise ParseError, "Excessively large numbers of repeats are forbidden."
-        variables['counter'] = 0
+        context.variables['counter'] = 0
         counter = 0
         value = ''
         while counter < times:
-            variables['counter'] += 1
+            context.variables['counter'] += 1
             counter += 1
-            value += treelevel(node, irc, origin, args, channel, variables)
+            value += treelevel(node, context)
         return value
     elif node.name == 'args':
         try:
             if not node.attribute:
-                return ' '.join(args)
+                return ' '.join(context.args)
             else:
                 if ':' not in node.attribute:
-                    return args[int(node.attribute)]
+                    return context.args[int(node.attribute)]
                 else:
                     start, finish = node.attribute.split(':')
-                    return ' '.join(args[int(start):int(finish)])
+                    return ' '.join(context.args[int(start):int(finish)])
         except:
             return '~B[bad arg numbers %s]~B' % node.attribute
     elif node.name == 'while':
         try:
             counter = 0
             value = ''
-            while eval(node.attribute, variables):
-                value += treelevel(node, irc, origin, args, channel, variables)
+            while eval(node.attribute, context.variables):
+                value += treelevel(node, context)
                 counter += 1
                 if counter >= 50:
                     value += '~B[excessive looping; abandoning]~B'
@@ -276,8 +302,8 @@ def dotree(node, irc, origin, args, channel, variables=None):
     elif node.name == 'random':
         r = node.attribute.split(':')
         try:
-            a = get_var(r[0], irc, origin, args, channel, variables)
-            b = get_var(r[1], irc, origin, args, channel, variables)
+            a = get_var(r[0], context)
+            b = get_var(r[1], context)
             return stringify(random.randint(int(a or r[0]), int(b or r[1])))
         except:
             raise ParseError, "[random a:b] requires two integers a and b (a <= result <= b)"
@@ -291,7 +317,7 @@ def dotree(node, irc, origin, args, channel, variables=None):
             real_children = node.children[0].children
         else:
             real_children = node.children
-        return dotree(random.choice(real_children), irc, origin, args, channel, variables)
+        return dotree(random.choice(real_children), context)
     elif node.name == 'noun':
         word = word_from_file('data/nouns')
         if node.attribute == 'plural':
@@ -353,41 +379,41 @@ def dotree(node, irc, origin, args, channel, variables=None):
     elif node.name == '|':
         return ''
     elif node.name == 'rnick':
-        if channel[0] != '#':
-            return random.choice((irc.nick, channel))
+        if context.channel[0] != '#':
+            return random.choice((context.irc.nick, context.channel))
         else:
             try:
-                return random.choice(m('chantrack').network(irc)[channel].users.values()).nick
+                return random.choice(m('chantrack').network(context.irc)[context.channel].users.values()).nick
             except ModuleNotLoaded:
-                return origin.nick
+                return context.origin.nick
     elif node.name == 'try':
-        value = get_var(node.attribute, irc, origin, args, channel, variables)
+        value = get_var(node.attribute, context)
         if value is not None:
             return value
         else:
-            return treelevel(node, irc, origin, args, channel, variables)
+            return treelevel(node, context)
     elif node.name == 'func':
-        variables[node.attribute] = node
+        context.variables[node.attribute] = node
         return ''
     elif node.name == 'set':
-        variables[node.attribute] = treelevel(node, irc, origin, args, channel, variables)
+        context.variables[node.attribute] = treelevel(node, context)
         try:
-            intvar = int(variables[node.attribute])
-            floatvar = float(variables[node.attribute])
+            intvar = int(context.variables[node.attribute])
+            floatvar = float(context.variables[node.attribute])
             if abs(intvar - floatvar) < 0.00001:
-                variables[node.attribute] = intvar
+                context.variables[node.attribute] = intvar
             else:
-                variables[node.attribute] = floatvar
+                context.variables[node.attribute] = floatvar
         except:
             pass
         return ''
     elif node.name == 'get':
-        name = treelevel(node, irc, origin, args, channel, variables)
-        return stringify(get_var(name, irc, origin, args, channel, variables, node.attribute))
+        name = treelevel(node, context)
+        return stringify(get_var(name, context, node.attribute))
     elif node.name == 'length':
-        return stringify(len(treelevel(node, irc, origin, args, channel, variables)))
+        return stringify(len(treelevel(node, context)))
     elif node.name == 'capitalise':
-        contents = treelevel(node, irc, origin, args, channel, variables)
+        contents = treelevel(node, context)
         if node.attribute == '' or node.attribute == 'first':
             if len(contents) > 0:
                 contents = contents[0].upper() + contents[1:]
@@ -403,13 +429,13 @@ def dotree(node, irc, origin, args, channel, variables=None):
             return contents
         return contents
     elif node.name == 'indefinite' or node.name == 'indef':
-        phrase = treelevel(node, irc, origin, args, channel, variables)
+        phrase = treelevel(node, context)
         if phrase[0].lower() in 'aeiou':
             return "an %s" % phrase
         else:
             return "a %s" % phrase
     elif node.name == 'math':
-        expression = treelevel(node, irc, origin, args, channel, variables)
+        expression = treelevel(node, context)
         try:
             math_functions = {
                 'pow': pow,
@@ -430,7 +456,7 @@ def dotree(node, irc, origin, args, channel, variables=None):
                 'sqrt': math.sqrt,
                 '__builtins__': None,
             }
-            result = eval(expression, math_functions, variables)
+            result = eval(expression, math_functions, context.variables)
             if abs(result) < 0.000000001 and result != 0:
                 result = 0.0
             return stringify(result)
