@@ -5,8 +5,8 @@ import os
 import subprocess
 import threading
 
-PISG_OUTPUT = "/home/katharine/web/irc.ajaxlife.net/stats/"
-PISG_WEB_URL = "http://irc.ajaxlife.net/stats/%s/%s.html"
+PISG_OUTPUT = "data/web/pisg/"
+PISG_WEB_URL = "%sstatic/pisg/%s/%s.html"
 
 def run_pisg(network, channel, irc=None):
     update_nicks()
@@ -23,7 +23,8 @@ def run_pisg(network, channel, irc=None):
         '-l', 'data/logs/%s/%s.log' % (network.replace('/','_'), channel.replace('/','_')),
     ])
     if irc is not None:
-        m('irc_helpers').message(irc, channel, "Stats generation completed. You can see them at %s" % (PISG_WEB_URL % (network, channel[1:])))
+        url = PISG_WEB_URL % (m('webserver').get_root_address(), network, channel[1:])
+        m('irc_helpers').message(irc, channel, "Stats generation completed. You can see them at %s" % url)
 
 def update_nicks():
     aliases = m('datastore').query("SELECT alias, canon FROM aliases")

@@ -8,6 +8,8 @@ def init():
     add_hook('error', server_disconnect)
     add_hook('001', connected)
     add_hook('privmsg', privmsg)
+    add_hook('nick', nick)
+    add_hook('443', nick_taken)
 
 def ping(irc, origin, args):
     irc.raw("PONG :%s" % args[0])
@@ -22,6 +24,24 @@ def connected(irc, origin, args):
     
     modules.call_hook('connected', irc)
     logger.info("Completed connecting to %s" % irc.network.server)
+
+def nick(irc, origin, args):
+    if origin.nick == irc.nick:
+        irc.nick = args[0]
+        logger.info("Changed nick on %s from %s to %s" % (irc.network, origin.nick, irc.nick))
+
+def nick_taken(irc, origin, args):
+    try:
+        pos = irc.network.nicks.index(irc.nick) + 1
+    except:
+        pos = 0
+    if pos == len(irc.network.nicks):
+        irc.disconnect()
+        logger.error("Disconnected from %s: no nicks left." % irc.network)
+    else:
+        irc.nick = irc.network.nicks[pos]
+        irc.raw("NICK %s" % irc.nick)
+        logger.info("Trying new nick %s for %s; last attempt already taken." % (irc.nick, irc.network))
 
 def privmsg(irc, origin, args):
     try:
