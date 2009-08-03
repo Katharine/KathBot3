@@ -27,16 +27,15 @@ def run_pisg(network, channel, irc=None):
         m('irc_helpers').message(irc, channel, "Stats generation completed. You can see them at %s" % url)
 
 def update_nicks():
-    aliases = m('datastore').query("SELECT alias, canon FROM aliases")
+    users = m('datastore').query("SELECT nick FROM users")
     nicks = {}
-    for alias in aliases:
-        if alias[1] not in nicks:
-            nicks[alias[1]] = StatUser(alias[1])
-        nicks[alias[1]].aliases.append(alias[0])
+    for user in users:
+        nick = user[0]
+        nicks[nick] = StatUser(nick)
     with open('data/pisg/nicks.cfg', 'w') as f:
         for nick in nicks:
             user = nicks[nick]
-            f.write('<user nick="%s" alias="%s">\n' % (nick, ' '.join(user.aliases)))
+            f.write('<user nick="%s" alias="%s" sex="%s">\n' % (nick, ' '.join(user.aliases), user.gender))
 
 def pisg(network, channel, irc=None):
     thread = threading.Thread(target=run_pisg, name="pisg-manual-%s-%s" % (network, channel), args=(network, channel), kwargs={'irc': irc})
@@ -48,6 +47,18 @@ def init():
 def message(irc, channel, origin, command, args):
     if command == 'stats':
         pisg(irc.network.name, channel, irc)
+    elif command == 'gender':
+        gender = args[0] if len(args) > 0 else None
+        nick = m('security').get_canonical_nick(origin.nick)
+        if gender in ('m', 'f', 'b'):
+            count = m('datastore').query("SELECT COUNT(nick) FROM pisg_data WHERE nick = ?", nick)[0][0]
+            if count:
+                m('datastore').execute("UPDATE pisg_data SET gender = ? WHERE nick = ?", gender, nick)
+            else:
+                m('datastore').execute("INSERT INTO pisg_data (nick, gender) VALUES (?, ?)", nick, gender)
+            m('irc_helpers').message(irc, channel, "Gender updated.")
+        else:
+            m('irc_helpers').message(irc, channel, "Please specify 'm' for male, 'f' for female, or 'b' for bot.")
 
 class StatUser(object):
     aliases = None
@@ -56,4 +67,7 @@ class StatUser(object):
     
     def __init__(self, nick):
         self.nick = nick
-        self.aliases = []
+        data = m('datastore').query("SELECT gender FROM pisg_data WHERE nick = ?", nick)
+        self.aliases = [x[0] for x  in m('datastore').query("SELECT alias FROM aliases WHERE canon = ?", nick)]
+        if len(data) > 0:
+            self.gender = data[0][0].lower()
