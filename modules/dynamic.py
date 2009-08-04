@@ -8,6 +8,7 @@ import datetime
 import os
 import math
 import textwrap
+import inspect
 
 parent_tags = set(('if', 'else', 'choose', 'choice', 'c', '|', 'set', 'try', 'length', 'indefinite', 'indef', 'capitalise', 'math', 'repeat', 'while', 'get', 'func'))
 grouping_tags = set(('root', 'else', 'choice', 'c', '|'))
