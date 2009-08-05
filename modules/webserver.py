@@ -26,8 +26,8 @@ class KBHTTPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     server_version = 'KathBot/3'
     protocol_version = 'HTTP/1.0'
     
-    def send_output(self, output, discard_body=False, content_type='text/html; charset=utf-8', content_encoding=None):
-        if content_type.startswith('text/'):
+    def send_output(self, output, discard_body=False, content_type='text/html; charset=utf-8', content_encoding=None, encoded=False):
+        if content_type.startswith('text/') and not encoded:
             output = output.encode('utf-8')
         self.send_response(200)
         self.send_header("Content-Length", str(len(output)))
@@ -56,7 +56,7 @@ class KBHTTPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                     content_type, content_encoding = mimetypes.guess_type(path, strict=False)
                     if content_type is None:
                         content_type = 'application/octet-stream'
-                    self.send_output(content, content_type=content_type, content_encoding=content_encoding)
+                    self.send_output(content, content_type=content_type, content_encoding=content_encoding, encoded=True)
                 except IOError:
                     self.send_error(404)
         else:

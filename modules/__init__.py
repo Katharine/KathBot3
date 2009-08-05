@@ -25,12 +25,11 @@ def call_hook(hook, *args, **kwds):
 
 class RunHook(threading.Thread):
     def __init__(self, hook, *args, **kwds):
-        #threading.Thread.__init__(self, name=hook)
+        threading.Thread.__init__(self, name=hook)
         self.hook = hook
         self.args = args
         self.kwds = kwds
-        #self.start()
-        self.run()
+        self.start()
     
     def run(self):
         try:
