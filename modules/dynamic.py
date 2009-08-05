@@ -10,7 +10,7 @@ import math
 import textwrap
 import inspect
 
-parent_tags = set(('if', 'else', 'choose', 'choice', 'c', '|', 'set', 'try', 'length', 'indefinite', 'indef', 'capitalise', 'math', 'repeat', 'while', 'get', 'func'))
+parent_tags = set(('if', 'else', 'choose', 'choice', 'c', '|', 'set', 'try', 'math', 'repeat', 'while', 'get', 'func'))
 grouping_tags = set(('root', 'else', 'choice', 'c', '|'))
 registered_tags = {} # tag => callback
 module_registrations = {} # module => list
@@ -74,6 +74,9 @@ class TagContext(dict):
         if isinstance(value, ParseNode):
             return typecast(treelevel(value, self))
         return value
+
+    def __setitem__(self, key, value):
+        self.variables[key] = value
     
     def keys(self):
         return self.variables.keys()
@@ -658,32 +661,6 @@ def tag_get(node, context):
     name = treelevel(node, context)
     return stringify(get_var(name, context, node.attribute))
 
-def tag_length(node, context):
-    return stringify(len(treelevel(node, context)))
-
-def tag_capitalise(node, context):
-    contents = treelevel(node, context)
-    if node.attribute == '' or node.attribute == 'first':
-        if len(contents) > 0:
-            contents = contents[0].upper() + contents[1:]
-    elif node.attribute == 'words':
-        words = contents.split(' ')
-        contents = ''
-        for word in words:
-            contents += word[0].upper() + word[1:] + ' '
-        return contents.strip()
-    elif node.attribute == 'all':
-        return contents.upper()
-    else:
-        return contents
-    return contents
-
-def tag_indefinite(node, context):
-    phrase = treelevel(node, context)
-    if phrase[0].lower() in 'aeiou':
-        return "an %s" % phrase
-    else:
-        return "a %s" % phrase
 
 def tag_indef(node, context):
     return tag_indefinite(node, context)
