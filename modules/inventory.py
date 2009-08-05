@@ -12,7 +12,6 @@ def parse_actions(irc, channel, user, message):
     irch = m('irc_helpers')
     words, pattern = make_pattern(irc, channel, user, message)
     length = len(pattern)
-    
     if pattern[0:3] == ['action', 'item', 'nick'] and length >= 3:
         if words[0] not in give_words:
             return
@@ -20,8 +19,8 @@ def parse_actions(irc, channel, user, message):
         #
         target = words[2]
         item = words[1]
-        irch.message(irc, channel, '~B[Inventory]~B [%s lost one %s.]' % (user.nick, item))
-        irch.message(irc, channel, '~B[Inventory]~B [%s acquired one %s.]' % (target.nick, item))
+        irch.message(irc, channel, '(%s lost one %s)' % (user.nick, item))
+        irch.message(irc, channel, '(%s acquired one %s)' % (target.nick, item))
         revoke_item(user.uid, item_id_by_name(item))
         give_item(target.uid, item_id_by_name(item))
     elif pattern[0:3] == ['action', 'nick', 'item'] and length >= 3:
@@ -31,8 +30,8 @@ def parse_actions(irc, channel, user, message):
         #
         target = words[1]
         item = words[2]
-        irch.message(irc, channel, '~B[Inventory]~B [%s lost one %s.]' % (user.nick, item))
-        irch.message(irc, channel, '~B[Inventory]~B [%s acquired one %s.]' % (target.nick, item))
+        irch.message(irc, channel, '(%s lost one %s)' % (user.nick, item))
+        irch.message(irc, channel, '(%s acquired one %s)' % (target.nick, item))
         revoke_item(user.uid, item_id_by_name(item))
         give_item(target.uid, item_id_by_name(item))
     elif pattern[0:3] == ['action', 'nick', 'interaction'] and length >= 3:
@@ -43,28 +42,28 @@ def parse_actions(irc, channel, user, message):
         target = words[1]
         interaction = words[2]
         give_stat(target.uid, stat_id_by_name(interaction))
-        irch.message(irc, channel, '~B[Inventory]~B [%s has been %s.]' % (target.nick, get_stat_fullname(stat_id_by_name(interaction))))
+        irch.message(irc, channel, '(%s has been %s)' % (target.nick, get_stat_fullname(stat_id_by_name(interaction))))
     elif pattern[0:2] == ['interaction', 'nick'] and length >= 2:
         #/me hugs nick
         #
         target = words[1]
         interaction = words[0]
         give_stat(target.uid, stat_id_by_name(interaction))
-        irch.message(irc, channel, '~B[Inventory]~B [%s has been %s.]' % (target.nick, get_stat_fullname(stat_id_by_name(interaction))))
+        irch.message(irc, channel, '(%s has been %s)' % (target.nick, get_stat_fullname(stat_id_by_name(interaction))))
     elif pattern[0:2] == ['action', 'item'] and length >= 2:
         if words[0] in trash_words:
             #/me drops an item
             #
             action = words[0]
             item = words[1]
-            irch.message(irc, channel, '~B[Inventory]~B [%s lost one %s.]' % (user.nick, item))
+            irch.message(irc, channel, '(%s lost one %s)' % (user.nick, item))
             revoke_item(user.uid, item_id_by_name(item))
         elif words[0] in destruct_words:
             #/me explodes her item
             #
             action = words[0]
             item = words[1]
-            irch.message(irc, channel, '~B[Inventory]~B [%s lost one %s, but gained some ashes.]' % (user.nick, item))
+            irch.message(irc, channel, '(%s lost one %s, but gained some ashes)' % (user.nick, item))
             revoke_item(user.uid, item_id_by_name(item))
             give_item(user.uid, item_id_by_name('Ashes'))
         elif words[0] in examine_words:
@@ -72,9 +71,9 @@ def parse_actions(irc, channel, user, message):
             item = words[1]
             description = get_item_description(item_id_by_name(item))
             if description != '' and description != None:
-                irch.message(irc, channel, "~B[Inventory]~(Examining '%s')~B %s" % (item, description))
+                irch.message(irc, channel, "~B(Examining '%s')~B %s" % (item, description))
             else:
-                irch.message(irc, channel, "~B[Inventory]~B You don't have one of those to examine.")
+                irch.message(irc, channel, "(You don't have one of those to examine)")
 
 ###
 def make_pattern(irc, channel, user, message):
@@ -89,9 +88,9 @@ def make_pattern(irc, channel, user, message):
         if word in actions:
             pattern.append('action')
             words.append(word)
-        if word in interactions:
+        if word[0:3] in interactions:
             pattern.append('interaction')
-            words.append(word[0:2])
+            words.append(word[0:3])
         if nick_is_present(irc, channel, word):
             pattern.append('nick')
             words.append(make_user(irc, word))
@@ -159,31 +158,33 @@ def give_stat(userid, itemid):
     
     count = m('datastore').query('SELECT count FROM inventory_user_stats WHERE userid = ? AND itemid = ?', userid, itemid)
     if len(count) == 0:
-        m('datastore').execute('INSERT INTO inventory_user_items (userid, itemid, count) VALUES (?, ?, ?)', userid, itemid, 1)
+        m('datastore').execute('INSERT INTO inventory_user_stats (userid, itemid, count) VALUES (?, ?, ?)', userid, itemid, 1)
     else:
-        m('datastore').execute("UPDATE inventory_user_items SET count = ? WHERE userid = ? AND itemid = ?", count[0][0] + 1, userid, itemid)
+        m('datastore').execute("UPDATE inventory_user_stats SET count = ? WHERE userid = ? AND itemid = ?", count[0][0] + 1, userid, itemid)
 
 ###
 def add_item(name, description, effects):
     if len(m('datastore').query('SELECT description FROM inventory_items WHERE name = ?', name)) == 0:
         m('datastore').execute('REPLACE INTO inventory_items (name, description, effects) VALUES (?, ?, ?)', name, description, effects)
-        return True
-    return False
+    else:
+        m('datastore').execute('UPDATE inventory_items SET description = ?, effects = ? WHERE name = ?', description, effects, name)
+    return True
 
 ###
 def add_effect(name, description):
     if len(m('datastore').query('REPLACE description FROM inventory_effects WHERE name = ?', name)) == 0:
         m('datastore').execute('INSERT INTO inventory_effects (name, description) VALUES (?, ?)', name, description)
-        return True
     else:
-        return False
+        m('datastore').execute('UPDATE inventory_effects SET description = ? WHERE name = ?', description, name)
+    return True
 
 ###
-def add_stat(shortname, fullname):
-    if len(m('datastore').query('SELECT fullname FROM inventory_stats WHERE shortname = ?', shortname)) == 0:
-        m('datastore').execute('REPLACE INTO inventory_stats (shortname, fullname) VALUES (?, ?)', shortname, fullname)
-        return True
-    return False
+def add_stat(shortname, fullname, description):
+    if len(m('datastore').query('SELECT shortname FROM inventory_stats WHERE shortname = ?', shortname)) == 0:
+        m('datastore').execute('INSERT INTO inventory_stats (shortname, fullname, description) VALUES (?, ?, ?)', shortname, fullname, description)
+    else:
+        m('datastore').execute('UPDATE inventory_stats SET fullname = ?, description = ? WHERE shortname = ?', fullname, description, shortname)
+    return True
 
 ###
 def user_has_effect(userid, effectquery):
@@ -307,6 +308,13 @@ def list_stats(userid):
         index += 1
     return stats;
 
+###
+def create_user_maybe(userid):
+    #~Add user if they don't exist BEFORE interacting!~#
+    if len(m('datastore').query('SELECT count FROM inventory_user_stats WHERE userid = ? AND itemid = ?', userid, stat_id_by_name('ALIVE'))) == 0:
+        m('datastore').execute('INSERT INTO inventory_user_items (userid, itemid, count) VALUES (?, ?, ?)', userid, item_id_by_name('Fork'), 1)
+        m('datastore').execute('INSERT INTO inventory_user_stats (userid, itemid, count) VALUES (?, ?, ?)', userid, stat_id_by_name('ALIVE'), 1)
+
 ######################
 ######################
 def init():
@@ -322,13 +330,9 @@ def message(irc, channel, origin, command, args):
     userid = m('security').get_user_id(origin)
     if userid == None:
         return #Only people with #KathBot3 accounts can use this module.
-        irch.message(irc, channel, "~B[Inventory]~B You can not use the inventory module to unless you have a KB3-account.")
+        irch.message(irc, channel, "You can not use the inventory module to unless you have a KB3-account.")
     
-    #~Add user if they don't exist BEFORE interacting!~#
-    if len(m('datastore').query('SELECT count FROM inventory_user_stats WHERE userid = ? AND itemid = ?', userid, stat_id_by_name('ALIVE'))) == 0:
-        m('datastore').execute('REPLACE INTO inventory_user_items (userid, itemid, count) VALUES (?, ?, ?)', userid, item_id_by_name('Fork'), 1)
-        m('datastore').execute('REPLACE INTO inventory_user_stats (userid, itemid, count) VALUES (?, ?, ?)', userid, stat_id_by_name('ALIVE'), 1)
-    #~#
+    create_user_maybe(userid)
     
     if command == 'inventory':
         itemlist = list_inventory(userid)
@@ -336,27 +340,28 @@ def message(irc, channel, origin, command, args):
         for item in itemlist:
             istring += '%s %s, ' % (itemlist[item], item)
         if len(itemlist) <= 0:
-            istring += 'no items, '
-        istring += 'and '
+            istring += 'no items'
         statlist = list_stats(userid)
         if len(statlist) == 1:
-            istring += "doesn't currenly have any statistics, but is noted to be alive."
+            istring += "and doesn't currenly have any statistics, but is noted to be alive."
         else:
-            istring += 'has gotten '
+            istring += 'has been '
             for stat in statlist:
-                istring += '%s %s, ' % (statlist[stat], stat)
+                if stat == 'Alive':
+                    continue
+                istring += '%s %s times, ' % (stat, statlist[stat])
             istring = istring[0:len(istring)-2]
             istring += ', and is noted to be alive.'
-        irch.message(irc, channel, '~B[Inventory]~B ' + istring)
+        irch.message(irc, channel, istring)
     elif command == 'inspect' or command == 'examine':
         #!examine item   -or-   !inspect item
         if len(args) >= 1:
             name = ' '.join(args).strip()
             description = get_item_description(item_id_by_name(name))
             if description != '' and description != None:
-                irch.message(irc, channel, "~B[Inventory]~(Examining '%s')~B %s" % (name, description))
+                irch.message(irc, channel, "~B(Examining '%s')~B %s" % (name, description))
             else:
-                irch.message(irc, channel, "~B[Inventory]~B You don't have one of those to examine.")
+                irch.message(irc, channel, "You don't have one of those to examine.")
     elif command == "give":
         #!give nick item
         item = args[1]
@@ -365,10 +370,10 @@ def message(irc, channel, origin, command, args):
         if not nick_is_present(irc, channel, target.nick):
             return #Can't give to someone who isn't here.
         if not user_has_item(userid, item_id_by_name(item)):
-            irch.message(irc, channel, "~B[Inventory]~B You can not give away something you don't have.")
+            irch.message(irc, channel, "You can not give away something you don't have.")
             return
-        irch.message(irc, channel, '~B[Inventory]~B [%s lost one %s.]' % (origin.nick, item))
-        irch.message(irc, channel, '~B[Inventory]~B [%s acquired one %s.]' % (target.nick, item))
+        irch.message(irc, channel, '[%s lost one %s.]' % (origin.nick, item))
+        irch.message(irc, channel, '[%s acquired one %s.]' % (target.nick, item))
         revoke_item(userid, item_id_by_name(item))
         give_item(target.uid, item_id_by_name(item))
     elif command == 'sudogive':
@@ -377,38 +382,38 @@ def message(irc, channel, origin, command, args):
         if not item_exists(item_name_by_id(item)):
             return
         sudo_give_item(target.uid, item)
-        irch.message(irc, channel, '~B[Inventory]~B [%s acquired one %s.]' % (target.nick, item_name_by_id(item)))
+        irch.message(irc, channel, '[%s acquired one %s.]' % (target.nick, item_name_by_id(item)))
     elif command == 'trash' or command == 'delete':
         #!trash item   -or-   !delete item
         item = args[0]
-        irch.message(irc, channel, '~B[Inventory]~B [%s lost one %s.]' % (origin.nick, item))
+        irch.message(irc, channel, '[%s lost one %s.]' % (origin.nick, item))
         revoke_item(userid, item_id_by_name(item))
     elif command == 'addeffect':
         args = ' '.join(args)
-        if args.find('(') and args.find(')'):
+        if args.find('{') and args.find('}'):
             #!addeffect name (description)
-            name = args[0:args.find('(')]
-            description = args[args.find('(')+1:args.find(')')]
+            name = args[0:args.find('{')]
+            description = args[args.find('{')+1:args.find('}')]
             add_effect(name, description)
-            irch.message(irc, channel, "~B[Inventory]~B Effect Added.")
+            irch.message(irc, channel, "Effect Added.")
         else:
-            irch.message(irc, channel, "~B[Inventory]~B Invalid Syntax.")
+            irch.message(irc, channel, "Invalid Syntax.")
     elif command == 'addstat':
         args = ' '.join(args)
-        if args.find('(') and args.find(')'):
+        if args.find('{') and args.find('}'):
             #!addstat name (description)
-            name = args[0:args.find('(')]
-            description = args[args.find('(')+1:args.find(')')]
-            add_stat(name, description)
-            irch.message(irc, channel, "~B[Inventory]~B Stat Added.")
+            name = args[0:args.find('{') - 1]
+            description = args[args.find('{')+1:args.find('}')]
+            add_stat(name[0:3].lower(), name, description)
+            irch.message(irc, channel, "Stat ~B%s~B added." % name)
         else:
-            irch.message(irc, channel, "~B[Inventory]~B Invalid Syntax.")
+            irch.message(irc, channel, "Invalid Syntax.")
     elif command == 'additem':
         args = ' '.join(args)
-        if args.find('(') and args.find(')') and args.find(','):
+        if args.find('{') and args.find('}') and args.find(','):
             #!additem name (description) with (effect1, effect2, effect3, etc..)
-            name = args[0:args.find('(')].strip()
-            description = args[args.find('(')+1:args.find(')')]
+            name = args[0:args.find('{')].strip()
+            description = args[args.find('{')+1:args.find('}')]
             temp = args[args.find('with (')+6:len(args)-1].split(',')
             effects = []
             for effect in temp:
@@ -417,9 +422,9 @@ def message(irc, channel, origin, command, args):
             effects = ','.join(effects)
             add_item(name, description, effects)
             logger.info('Name: "%s" Desc: "%s" Effects: "%s"' % (name, description, effects))
-            irch.message(irc, channel, "~B[Inventory]~B Item Added.")
+            irch.message(irc, channel, "Item Added.")
         else:
-            irch.message(irc, channel, "~B[Inventory]~B Invalid Syntax.")
+            irch.message(irc, channel, "Invalid Syntax.")
 
 
 def privmsg(irc, origin, args):
@@ -434,10 +439,7 @@ def privmsg(irc, origin, args):
     if '\x01ACTION' not in message:
         return
     
-    #~Add user if they don't exist BEFORE interacting!~#
-    if len(m('datastore').query('SELECT count FROM inventory_user_stats WHERE userid = ? AND itemid = ?', userid, stat_id_by_name('ALIVE'))) == 0:
-        m('datastore').execute('REPLACE INTO inventory_user_items (userid, itemid, count) VALUES (?, ?, ?)', userid, item_id_by_name('Fork'), 1)
-        m('datastore').execute('REPLACE INTO inventory_user_stats (userid, itemid, count) VALUES (?, ?, ?)', userid, stat_id_by_name('ALIVE'), 1)
+    create_user_maybe(userid)
     #~#
     origin.nick = m('security').get_canonical_nick(origin.nick)
     origin.uid = userid
