@@ -90,6 +90,13 @@ class UserSettings(dict):
             raise KeyError, key
         return result[0][0]
     
+    def __contains__(self, key):
+        try:
+            self.__getitem__(key)
+            return True
+        except KeyError:
+            return False
+    
     def __setitem__(self, key, value):
         execute("REPLACE INTO user_settings (uid, setting, value) VALUES (?, ?, ?)", self.uid, key, value)
         return value
@@ -123,6 +130,13 @@ class ChannelSettings(dict):
     def __setitem__(self, key, value):
         execute("REPLACE INTO channel_settings (network, channel, setting, value) VALUES (?, ?, ?, ?)", self.network, self.channel, key, value)
         return value
+    
+    def __contains__(self, key):
+        try:
+            self.__getitem__(key)
+            return True
+        except KeyError:
+            return False
     
     def keys(self):
         return [x[0] for x in query("SELECT setting FROM channel_settings WHERE network = ? AND channel = ?", self.network, self.channel)]
