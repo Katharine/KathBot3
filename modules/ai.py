@@ -2,11 +2,15 @@ from __future__ import with_statement
 import threading
 import pickle
 import random
+from array import array
+
+COMMON_THRESHOLD = 0.007 # See if we can make it work this out itself.
 
 verbs = set()
 index = {}
+total_words = 0
 
-activity_lock = threading.Lock()
+activity_lock = threading.RLock()
 
 def init():
     add_hook('privmsg', privmsg)
@@ -21,24 +25,48 @@ def message(irc, channel, origin, command, args):
         longest_word = ''
         most_popular = ''
         most_popular_uses = 0
+        very_common = []
         for word in index:
             if len(word) > len(longest_word):
                 longest_word = word
-            if len(index[word]) > most_popular_uses:
+            uses = len(index[word])
+            if uses > most_popular_uses:
                 most_popular = word
-                most_popular_uses = len(index[word])
+                most_popular_uses = uses
+            if uses > total_words * COMMON_THRESHOLD:
+                very_common.append(word)
         
         most_popular_verb = ''
         verb_uses = 0
         for verb in verbs:
-            if len(index[verb]) > verb_uses:
-                most_popular_verb = verb
-                verb_uses = len(index[verb])
+            try:
+                if len(index[verb]) > verb_uses:
+                    most_popular_verb = verb
+                    verb_uses = len(index[verb])
+            except KeyError:
+                continue
         
-        m('irc_helpers').message(irc, channel, "I know ~B%i~B words, of which ~B%i~B are verbs." % (len(index), len(verbs)))
+        learning = m('datastore').channels[(irc, channel)].get('ai_learn', False)
+        response_frequency = int(m('datastore').channels[(irc, channel)].get('ai_respond', 0))
+        m('irc_helpers').message(irc, channel, "Learning: %s. Response frequency: %i%%" % ('yes' if learning else 'no', response_frequency))
+        m('irc_helpers').message(irc, channel, "I know ~B%i~B unique words, of which ~B%i~B are verbs. I have heard ~B%s~B words in total." % (len(index), len(verbs), total_words))
         m('irc_helpers').message(irc, channel, "The longest word is ~B%s~B. The most popular word is ~B%s~B (which has been used ~B%i~B times)." % (longest_word, most_popular, most_popular_uses))
         m('irc_helpers').message(irc, channel, "The most popular verb is ~B%s~B, and it's been used ~B%i~B times." % (most_popular_verb, verb_uses))
-        
+        m('irc_helpers').message(irc, channel, "I know ~B%i~B very common words: %s" % (len(very_common), ', '.join(very_common)))
+    elif command == 'ailearn':
+        enabled = (args[0].lower() == 'on') if len(args) else False
+        m('datastore').channels[(irc, channel)]['ai_learn'] = enabled
+        m('irc_helpers').message(irc, channel, "Learning %s." % 'enabled' if enabled else 'disabled')
+    elif command == 'airespond':
+        try:
+            frequency = int(args[0])
+            if frequency < 0 or frequency > 100:
+                raise ValueError
+        except:
+            m('irc_helpers').message(irc, channel, "Please specify a frequency between 0 and 100.")
+            return
+        m('datastore').channels[(irc, channel)]['ai_respond'] = frequency
+        m('irc_helpers').message(irc, channel, "Response frequency set to %i%%." % frequency)
 
 def privmsg(irc, origin, args):
     channel = args[0]
@@ -52,16 +80,19 @@ def privmsg(irc, origin, args):
     if words[0] == '/me':
         words.pop(0)
         # Should we check for ending in 's'?
-        verbs.add(words[0])
+        verbs.add(words[0].strip('.,;:"/?\'()!<>'))
     
     line = []
     for word in words:
         word = word.strip('.,;:"/?\'()!<>').lower()
-        line.append(word)
+        if word != '':
+            line.append(word)
     line = ' '.join(line)
-    #if random.randint(0,4) == 1 or irc.nick.lower() in line:
-    #respond(irc, channel, line)
-    save_line(line)
+    response_frequency = int(m('datastore').channels[(irc, channel)].get('ai_respond', 0))
+    if response_frequency > 0 and (random.randint(0, 100) < response_frequency or irc.nick.lower() in line):
+        respond(irc, channel, line)
+    if m('datastore').channels[(irc, channel)].get('ai_learn', False):
+        save_line(line)
 
 def respond(irc, channel, line):
     logger.info("Attempting a response.")
@@ -78,13 +109,16 @@ def respond(irc, channel, line):
                 continue
             if word == irc.nick.lower() or second_word == irc.nick.lower():
                 continue
+            if len(index[word]) > total_words * COMMON_THRESHOLD or len(index[second_word]) > total_words * COMMON_THRESHOLD:
+                logger.info("Words too common; ignoring.")
+                continue
             # Woo, two words we know! Can we put them together?
-            logger.info("We know '%s' and '%s'" % (word, second_word))
+            logger.debug("We know '%s' and '%s'" % (word, second_word))
             options = []
             for a in index[word]:
                 for b in index[second_word]:
-                    if b > a and b - a < 200: # Arbitrary, but must be less than 500.
-                        logger.info("Found nearby positions %i - %i" % (a, b))
+                    if b > a and b - a < 100: # Arbitrary, but must be less than 500.
+                        logger.debug("Found nearby positions %i - %i" % (a, b))
                         options.append((a, b))
             random.shuffle(options)
             with open('data/ai/memory', 'r') as memory:
@@ -93,17 +127,17 @@ def respond(irc, channel, line):
                     b = option[1]
                     memory.seek(a)
                     content = memory.read(b - a) + second_word + ' '
-                    logger.info("Read %s." % content)
+                    logger.debug("Read %s." % content)
                     if '\n' in content:
-                        logger.info("Invalid entry - newline!")
+                        logger.debug("Invalid entry - newline!")
                         continue
                     if last_word == word:
-                        response = response[len(word)+1:]
+                        content = content[len(word)+1:]
                     response += content
                     last_word = second_word
                     logger.info("Added %s to the response!" % content)
                     break
-    if response:
+    if response and response.strip() != line.strip():
         first_word = response.split(' ')[0]
         if first_word in verbs:
             response = '/me ' + response
@@ -115,6 +149,7 @@ def respond(irc, channel, line):
 def save_line(line):
     with activity_lock:
         with open('data/ai/memory', 'a+') as memory:
+            global total_words
             memory.seek(0, 2)
             start_pos = int(memory.tell())
             memory.write("%s\n" % line)
@@ -122,9 +157,10 @@ def save_line(line):
             pos = start_pos
             for word in words:
                 if not word in index:
-                    index[word] = []
+                    index[word] = array('I')
                 index[word].append(pos)
                 pos += len(word) + 1
+            total_words += len(words)
 
 def load_caches():
     with activity_lock:
@@ -132,10 +168,10 @@ def load_caches():
         try:
             with open('data/ai/verbs', 'r') as verbf:
                 while True:
-                    line = verbf.readline().strip()
-                    if not line:
+                    line = verbf.readline()
+                    if line == '':
                         break
-                    verbs.add(line)
+                    verbs.add(line.strip())
         except IOError:
             logger.warn("Failed to load verb cache.")
             pass
@@ -144,6 +180,7 @@ def load_caches():
             with open('data/ai/index', 'rb') as indexf:
                 global index
                 index = pickle.load(indexf)
+            count_words()
         except IOError:
             logger.warn("Failed to load memory.")
 
@@ -155,3 +192,10 @@ def save_caches():
         
         with open('data/ai/index', 'wb') as indexf:
             pickle.dump(index, indexf, pickle.HIGHEST_PROTOCOL)
+
+def count_words():
+    with activity_lock:
+        global total_words
+        total_words = 0
+        for word in index:
+            total_words += len(index[word])
