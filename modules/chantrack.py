@@ -103,7 +103,7 @@ def mode(irc, origin, args):
             if direction > 0:
                 channel.modes.add(mode)
             elif direction < 0 and mode in channel.modes:
-                channel.modes.removelogger.debug
+                channel.modes.remove(mode)
         elif mode in ARG_MODES:
             arg_pointer += 1
 
