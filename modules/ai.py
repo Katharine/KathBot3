@@ -29,7 +29,7 @@ def message(irc, channel, origin, command, args):
                 most_popular_uses = len(index[word])
         
         m('irc_helpers').message(irc, channel, "I know ~B%i~B words, of which ~B%i~B are verbs." % (len(index), len(verbs)))
-        m('irc_helpers').message(irc, channel, "The longest word is ~B%s~B. The most popular word is ~B%s~B (which has been used ~B%i~B times)." % (longest_word, most_popular, most_popular_uses)).
+        m('irc_helpers').message(irc, channel, "The longest word is ~B%s~B. The most popular word is ~B%s~B (which has been used ~B%i~B times)." % (longest_word, most_popular, most_popular_uses))
 
 def privmsg(irc, origin, args):
     channel = args[0]
