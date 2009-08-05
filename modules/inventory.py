@@ -81,6 +81,7 @@ def make_pattern(irc, channel, user, message):
     temp = message.split(' ')
     words = []
     pattern = []
+    index = 0
     for word in temp:
         if item_exists(word) and user_has_item(user.uid, word):
             pattern.append('item')
@@ -94,6 +95,14 @@ def make_pattern(irc, channel, user, message):
         if nick_is_present(irc, channel, word):
             pattern.append('nick')
             words.append(make_user(irc, word))
+        try:
+            if item_exists(word + " " + temp[index+1]):
+                pattern.append('item')
+                words.append(word + " " + temp[index+1])
+        except:
+            index += 1
+            continue
+        index += 1
     return words, pattern
 
 ###
@@ -363,10 +372,12 @@ def message(irc, channel, origin, command, args):
         revoke_item(userid, item_id_by_name(item))
         give_item(target.uid, item_id_by_name(item))
     elif command == 'sudogive':
-        if origin.nick == "Davy":
-            target = make_user(irc, args[0])
-            item = item_id_by_name(args[1])
-            sudo_give_item(target.uid, item)
+        target = make_user(irc, args[0])
+        item = item_id_by_name(' '.join(args[1:]))
+        if not item_exists(item_name_by_id(item)):
+            return
+        sudo_give_item(target.uid, item)
+        irch.message(irc, channel, '~B[Inventory]~B [%s acquired one %s.]' % (target.nick, item_name_by_id(item)))
     elif command == 'trash' or command == 'delete':
         #!trash item   -or-   !delete item
         item = args[0]
