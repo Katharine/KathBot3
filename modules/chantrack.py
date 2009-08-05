@@ -47,12 +47,13 @@ def userhosts(irc, origin, args):
         host = hostmask[1]
         channels = nick_channels(irc, nick)
         if channels:
-            logger.info("Updated ident/host for %s" % nick)
             for channame in channels:
+                logger.debug("Updating %s in %s" % (nick, channame))
                 channel = network(irc)[channame]
                 user = channel.users[nick.lower()]
                 user.ident = ident
                 user.hostname = host
+            logger.debug("Updated ident/host for %s" % nick)
             
 
 def network(irc):
@@ -64,11 +65,11 @@ def join(irc, origin, args):
     channel = args[0].lower()
     if origin.nick == irc.nick:
         network(irc)[channel] = Channel(name=channel)
-        logger.info("Added channel %s/%s" % (irc.network, channel))
+        logger.debug("Added channel %s/%s" % (irc.network, channel))
         modules.call_hook('joined', irc, channel)
         irc.raw("MODE %s" % channel)
     else:
-        logger.info("Added nick %s to %s/%s" % (origin.nick, irc.network, channel))
+        logger.debug("Added nick %s to %s/%s" % (origin.nick, irc.network, channel))
     user = create_user(irc, origin.nick)
     network(irc)[channel].users[origin.nick.lower()] = user
     if not user.hostname:
@@ -102,7 +103,7 @@ def mode(irc, origin, args):
             if direction > 0:
                 channel.modes.add(mode)
             elif direction < 0 and mode in channel.modes:
-                channel.modes.remove(mode)
+                channel.modes.removelogger.debug
         elif mode in ARG_MODES:
             arg_pointer += 1
 
@@ -113,13 +114,13 @@ def initial_mode(irc, origin, args):
 def initial_topic(irc, origin, args):
     channel = args[1].lower()
     network(irc)[channel].topic = args[2]
-    logger.info('Set topic for %s/%s to "%s"' % (irc.network, channel, args[2]))
+    logger.debug('Set topic for %s/%s to "%s"' % (irc.network, channel, args[2]))
 
 def topic(irc, origin, args):
     channel = args[0].lower()
     topic = args[1]
     network(irc)[channel].topic = topic
-    logger.info('Updated topic for %s/%s to "%s"' % (irc.network, channel, topic))
+    logger.debug('Updated topic for %s/%s to "%s"' % (irc.network, channel, topic))
 
 def userlist(irc, origin, args):
     channel_name = args[2].lower()
@@ -133,30 +134,31 @@ def userlist(irc, origin, args):
         channel.users[user.nick.lower()] = user
         if not user.hostname:
             lookup.append(user.nick)
-        logger.info("Added nick %s to %s/%s" % (user.nick, irc.network, channel))
+        logger.debug("Added nick %s to %s/%s" % (user.nick, irc.network, channel))
     if lookup:
-        irc.raw("USERHOST %s" % ' '.join(lookup))
+        for i in range(0, len(lookup), 5):
+            irc.raw("USERHOST %s" % ' '.join(lookup[i:i+5]))
 
 def part(irc, origin, args):
     channel = args[0].lower()
     if irc.nick == origin.nick:
         del network(irc)[channel]
-        logger.info("Removed channel %s/%s" % (irc.network, channel))
+        logger.debug("Removed channel %s/%s" % (irc.network, channel))
         modules.call_hook('parted', irc, channel)
     else:
         del network(irc)[channel].users[origin.nick.lower()]
-        logger.info("Removed nick %s from %s/%s" % (origin.nick, irc.network, channel))
+        logger.debug("Removed nick %s from %s/%s" % (origin.nick, irc.network, channel))
 
 def kick(irc, origin, args):
     channel = args[0].lower()
     nick = args[1].lower()
     if nick == irc.nick.lower():
         del network(irc)[channel]
-        logger.info("Removed channel %s/%s" % (irc.network.name, channel))
+        logger.debug("Removed channel %s/%s" % (irc.network.name, channel))
         modules.call_hook('parted', irc, channel)
     else:
         del network(irc)[channel].users[nick]
-        logger.info("Removed nick %s from %s/%s" % (nick, irc.network, channel))
+        logger.debug("Removed nick %s from %s/%s" % (nick, irc.network, channel))
 
 def quit(irc, origin, args):
     if origin.nick == irc.nick:
@@ -166,7 +168,7 @@ def quit(irc, origin, args):
         channel = network(irc)[channel_name]
         if channel.users.get(nick):
             del channel.users[nick]
-            logger.info("Removed nick %s from %s/%s" % (origin.nick, irc.network, channel))
+            logger.debug("Removed nick %s from %s/%s" % (origin.nick, irc.network, channel))
 
 def nick(irc, origin, args):
     newnick = args[0]
@@ -179,7 +181,7 @@ def nick(irc, origin, args):
                 channel.users[newnick.lower()] = channel.users[origin.nick.lower()]
                 channel.users[newnick.lower()].nick = newnick
                 del channel.users[origin.nick.lower()]
-                logger.info("Renamed %s to %s in %s/%s" % (origin.nick, newnick, irc.network, channel))
+                logger.debug("Renamed %s to %s in %s/%s" % (origin.nick, newnick, irc.network, channel))
 
 # Information access
 
@@ -239,3 +241,6 @@ class User(object):
     
     def __str__(self):
         return '%s!%s@%s' % (self.nick, self.ident, self.hostname)
+    
+    def __repr__(self):
+        return '<%s>' % self.__str__()
