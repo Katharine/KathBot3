@@ -100,6 +100,12 @@ class UserSettings(dict):
     def __setitem__(self, key, value):
         execute("REPLACE INTO user_settings (uid, setting, value) VALUES (?, ?, ?)", self.uid, key, value)
         return value
+        
+    def get(self, key, default=None):
+        try:
+            return self.__getitem__(key)
+        except KeyError:
+            return default
     
     def keys(self):
         return [x[0] for x in query("SELECT setting FROM user_settings WHERE uid = ?", self.uid)]
@@ -108,7 +114,12 @@ class ChannelSettingsCollection(dict):
     def __getitem__(self, key):
         if len(key) != 2:
             raise KeyError, key
-        return ChannelSettings(key[0], key[1])
+        network = key[0]
+        if hasattr(network, 'network'):
+            network = network.network
+        if hasattr(network, 'name'):
+            network = network.name
+        return ChannelSettings(network, key[1])
     
     def keys(self):
         return query("SELECT network, channel FROM channel_settings GROUP BY network, channel")
@@ -137,6 +148,12 @@ class ChannelSettings(dict):
             return True
         except KeyError:
             return False
+        
+    def get(self, key, default=None):
+        try:
+            return self.__getitem__(key)
+        except KeyError:
+            return default
     
     def keys(self):
         return [x[0] for x in query("SELECT setting FROM channel_settings WHERE network = ? AND channel = ?", self.network, self.channel)]
