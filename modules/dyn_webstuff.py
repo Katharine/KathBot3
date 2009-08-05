@@ -1,6 +1,7 @@
 def add_tags():
     m('dynamic').add_tag("webget", tag_webget, True)
     m('dynamic').add_tag("webescape", tag_webescape, True)
+    m('dynamic').add_tag("unhtml", tag_unhtml, True)
 
 def init():
     add_hook('loaded', evt_loaded)
@@ -18,3 +19,6 @@ def tag_webget(node, context):
 
 def tag_webescape(node, context):
     return m('reference').escapeurl(m('dynamic').treelevel(node, context))
+
+def tag_unhtml(node, context):
+    return m('irc_helpers').html_to_irc(m('dynamic').treelevel(node, context))

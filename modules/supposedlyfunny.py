@@ -57,14 +57,3 @@ def message(irc, channel, origin, command, args):
         irch.message(irc,channel,'~B[bash]~B ~UFrom: http://www.bash.org/%s~U' % quote[0])
         for line in lines:
             irch.message(irc, channel, '~B[bash]~B %s' % line)
-    elif command == 'foon':
-        # Davy here! O: 7-21-09
-        try:
-            handle = urllib2.urlopen('http://www.foon.co.uk/')
-            data = handle.read()
-            handle.close()
-            phrase = re.findall("<div id='subtitle'>(.+?)</div>", data, re.S)
-            phrase = phrase[0]
-            irch.message(irc, channel, '~B[foon]~B ~U%s~U' % phrase)
-        except urllib2.HTTPError:
-            irch.message(irc, channel, '~B[foon]~B There was an error fetching a title message from foon.co.uk!')
