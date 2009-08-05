@@ -662,9 +662,6 @@ def tag_get(node, context):
     return stringify(get_var(name, context, node.attribute))
 
 
-def tag_indef(node, context):
-    return tag_indefinite(node, context)
-
 def tag_math(node, context):
     expression = treelevel(node, context)
     try:
