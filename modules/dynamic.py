@@ -684,7 +684,7 @@ def tag_math(node, context):
             'sqrt': math.sqrt,
             '__builtins__': None,
         }
-        result = eval(expression, math_functions, context)
+        result = eval(expression, context, math_functions)
         if abs(result) < 0.000000001 and result != 0:
             result = 0.0
         return stringify(result)

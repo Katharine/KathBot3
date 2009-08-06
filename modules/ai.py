@@ -4,7 +4,7 @@ import pickle
 import random
 from array import array
 
-COMMON_THRESHOLD = 0.007 # See if we can make it work this out itself.
+COMMON_THRESHOLD = 0.008 # See if we can make it work this out itself.
 
 verbs = set()
 index = {}
@@ -16,6 +16,10 @@ def init():
     add_hook('privmsg', privmsg)
     add_hook('message', message)
     load_caches()
+    try:
+        m('cron').add_cron(600, save_caches)
+    except ModuleNotLoaded:
+        logger.warn("Load the cron module for periodic cache saves.")
 
 def shutdown():
     save_caches()
