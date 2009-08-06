@@ -27,7 +27,7 @@ def privmsg(irc, origin, args):
         elif command == 'VERSION':
             respond(irc, nick, 'VERSION KathBot3, python %s' % sys.version.replace("\n", " "))
         elif command == 'SOURCE':
-            respond(irc, nick, 'SOURCE http://katharine.svn.beanstalkapp.com/kathbot/')
+            respond(irc, nick, 'SOURCE http://github.com/Katharine/KathBot3/tree/master')
         elif command == 'CLIENTINFO':
             respond(irc, nick, 'VERSION SOURCE PING CLIENTINFO ACTION FINGER TIME')
         elif command == 'FINGER':
