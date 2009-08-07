@@ -6,6 +6,7 @@ def add_tags():
     m('dynamic').add_tag('indefinite', tag_indefinite, True)
     m('dynamic').add_tag('length', tag_length, True)
     m('dynamic').add_tag('capitalise', tag_capitalise, True)
+    m('dynamic').add_tag('substr', tag_substr, True)
 
 def init():
     add_hook('loaded', evt_loaded)
@@ -17,7 +18,7 @@ def evt_loaded(mod):
 
 def tag_regex(node, context):
     Body = m('dynamic').treelevel(node, context)
-    RegEx = node.attribute
+    RegEx = m('dynamic').get_var_maybe(node.attribute, context)
     
     reg = re.search(RegEx, Body)
     if reg is None:
@@ -59,3 +60,28 @@ def tag_indefinite(node, context):
         return "an %s" % phrase
     else:
         return "a %s" % phrase
+
+def tag_substr(node, context):
+    #try:
+        parts = node.attribute.split(':')
+        if parts[0] == '':
+            a = None
+        else:
+            a = int(m('dynamic').get_var_maybe(parts[0], context))
+        
+        if len(parts) == 1:
+            return m('dynamic').stringify(m('dynamic').treelevel(node, context))[a]
+        else:
+            if parts[1] == '':
+                b = None
+            else:
+                b = int(m('dynamic').get_var_maybe(parts[1], context))
+        
+            if len(parts) > 2:
+                c = int(m('dynamic').get_var_maybe(parts[2], context))
+            else:
+                c = None
+            
+            return m('dynamic').stringify(m('dynamic').treelevel(node, context)).__getitem__(slice(a, b, c))
+   # except:
+    #    return '~B[substring fail]~B'
