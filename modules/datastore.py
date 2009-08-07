@@ -50,12 +50,14 @@ thread = None
 query_count = 0
 users = None
 channels = None
+general = None
 
 def init():
-    global connection, users, channels
+    global connection, users, channels, general
     connection = sqlite('data/kb3.dat')
     users = UserSettingsCollection()
     channels = ChannelSettingsCollection()
+    general = GlobalSettings()
 
 def shutdown():
     connection.close()
@@ -70,6 +72,20 @@ def execute(sql, *args):
     query_count += 1
     connection.execute(sql, args)
 
+class KBDict(dict):
+    def __contains__(self, key):
+        try:
+            self.__getitem__(key)
+            return True
+        except KeyError:
+            return False
+
+    def get(self, key, default=None):
+        try:
+            return self.__getitem__(key)
+        except KeyError:
+            return default
+
 class UserSettingsCollection(dict):
     def __getitem__(self, key):
         return UserSettings(key)
@@ -80,7 +96,7 @@ class UserSettingsCollection(dict):
     def __setitem__(self, key, value):
         raise RuntimeError, "You can't set users directly."
 
-class UserSettings(dict):
+class UserSettings(KBDict):
     def __init__(self, uid):
         self.uid = uid
     
@@ -90,23 +106,10 @@ class UserSettings(dict):
             raise KeyError, key
         return result[0][0]
     
-    def __contains__(self, key):
-        try:
-            self.__getitem__(key)
-            return True
-        except KeyError:
-            return False
-    
     def __setitem__(self, key, value):
         execute("REPLACE INTO user_settings (uid, setting, value) VALUES (?, ?, ?)", self.uid, key, value)
         return value
-        
-    def get(self, key, default=None):
-        try:
-            return self.__getitem__(key)
-        except KeyError:
-            return default
-    
+
     def keys(self):
         return [x[0] for x in query("SELECT setting FROM user_settings WHERE uid = ?", self.uid)]
 
@@ -127,7 +130,7 @@ class ChannelSettingsCollection(dict):
     def __setitem__(self, key, value):
         raise RuntimeError, "You can't set channels directly."
 
-class ChannelSettings(dict):
+class ChannelSettings(KBDict):
     def __init__(self, network, channel):
         self.network = network
         self.channel = channel
@@ -142,18 +145,19 @@ class ChannelSettings(dict):
         execute("REPLACE INTO channel_settings (network, channel, setting, value) VALUES (?, ?, ?, ?)", self.network, self.channel, key, value)
         return value
     
-    def __contains__(self, key):
-        try:
-            self.__getitem__(key)
-            return True
-        except KeyError:
-            return False
-        
-    def get(self, key, default=None):
-        try:
-            return self.__getitem__(key)
-        except KeyError:
-            return default
-    
     def keys(self):
         return [x[0] for x in query("SELECT setting FROM channel_settings WHERE network = ? AND channel = ?", self.network, self.channel)]
+
+class GlobalSettings(KBDict):
+    def __getitem__(self, key):
+        result = query("SELECT value FROM global_settings WHERE setting = ?", key)
+        if len(result) == 0:
+            raise KeyError, key
+        return result[0][0]
+    
+    def __setitem__(self, key, value):
+        execute("REPLACE INTO global_settings (setting, value) VALUES (?, ?)", key, value)
+        return value
+    
+    def keys(self):
+        return [x[0] for x in query("SELECT setting FROM global_settings")]

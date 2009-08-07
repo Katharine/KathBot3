@@ -10,8 +10,8 @@ import math
 import textwrap
 import inspect
 
-parent_tags = set(('if', 'else', 'choose', 'choice', 'c', '|', 'set', 'try', 'math', 'repeat', 'while', 'get', 'func'))
-grouping_tags = set(('root', 'else', 'choice', 'c', '|'))
+parent_tags = set(('if', 'else', 'choose', 'choice', 'c', '|', 'set', 'try', 'math', 'repeat', 'while', 'get', 'func', 'switch', 'case'))
+grouping_tags = set(('root', 'else', 'choice', 'c', '|', 'case'))
 registered_tags = {} # tag => callback
 module_registrations = {} # module => list
 
@@ -77,6 +77,9 @@ class TagContext(dict):
 
     def __setitem__(self, key, value):
         self.variables[key] = value
+    
+    def __contains__(self, key):
+        return key in self.variables
     
     def keys(self):
         return self.variables.keys()
@@ -157,7 +160,7 @@ def parse_tree(line):
                         current_node = current_node.parent
                     elif node.name == 'if' and current_node.name == 'else' and current_node.parent and current_node.parent.name == 'if':
                         current_node = current_node.parent.parent
-                    elif current_node.name == '|' and node.name == 'choose':
+                    elif current_node.name == '|' and (node.name == 'choose' or node.name == 'switch'):
                         current_node = current_node.parent.parent
                     else:
                         raise ParseError, "Mismatched closing [/%s]; expecting [/%s]." % (node.name, current_node.name)
@@ -211,6 +214,13 @@ def get_var(name, context, attribute=None):
             return value
     else:
         return None
+    
+def get_var_maybe(name, context):
+    value = context[name]
+    if value is None:
+        return name
+    else:
+        return value
 
 def dotree(node, context):
     # Strings are just strings
@@ -254,7 +264,7 @@ def format_source(node):
         attribute = ' ' + node.attribute
     else:
         attribute = ''
-    if node.name != 'root' and (node.name != '|' or node.parent.children[0] is not node):
+    if node.name != 'root' and (node.parent.name != 'choose' or node.name != '|' or node.parent.children[0] is not node):
         value = '~B\x03%s[%s%s]\x03~B' % (depth, node.name, attribute)
     else:
         value = ''
@@ -278,7 +288,7 @@ def init():
 
 def add_tag(tag, handler, parent=False):
     if tag in registered_tags or 'tag_%s' % tag in globals():
-        raise TagAlreadyExists
+        raise TagAlreadyExists, tag
     module = get_calling_module()
     registered_tags[tag] = handler
     if parent:
@@ -493,7 +503,7 @@ def tag_include(node, context):
 def tag_import(node, context):
     source = find_command(node.attribute)
     if source is not None:
-        variables[node.attribute] = parse_tree(source)
+        context.variables[node.attribute] = parse_tree(source)
         return "";
     return "~B[Could not import: %s]~B" % node.attribute
     
@@ -505,11 +515,7 @@ def tag_r(node, context):
 
 def tag_repeat(node, context):
     try:
-        value = get_var(node.attribute, context)
-        if value is not None:
-            times = int(value)
-        else:
-            times = int(node.attribute)
+        times = int(get_var_maybe(node.attribute, context))
     except Exception, message:
         raise ParseError, "[random repeats] requires repeats to be an integer greater than zero. (%s)" % message
     if times > 25:
@@ -532,7 +538,7 @@ def tag_args(node, context):
                 return context.args[int(node.attribute)]
             else:
                 start, finish = node.attribute.split(':')
-                return ' '.join(context.args[int(start):int(finish)])
+                return ' '.join(context.args[int(get_var_maybe(start, context)):int(get_var_maybe(finish, context))])
     except:
         return '~B[bad arg numbers %s]~B' % node.attribute
 
@@ -553,9 +559,9 @@ def tag_while(node, context):
 def tag_random(node, context):
     r = node.attribute.split(':')
     try:
-        a = get_var(r[0], context)
-        b = get_var(r[1], context)
-        return stringify(random.randint(int(a or r[0]), int(b or r[1])))
+        a = get_var_maybe(r[0], context)
+        b = get_var_maybe(r[1], context)
+        return stringify(random.randint(int(a), int(b)))
     except:
         raise ParseError, "[random a:b] requires two integers a and b (a <= result <= b)"
 
@@ -690,3 +696,11 @@ def tag_math(node, context):
         return stringify(result)
     except:
         return '~B[unsolvable sums]~B'
+
+def tag_switch(node, context):
+    test = get_var_maybe(node.attribute, context)
+    for child in node.children:
+        if get_var_maybe(child.attribute, context) == test:
+            return treelevel(child, context)
+            break
+    return ''

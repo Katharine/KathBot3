@@ -6,8 +6,9 @@ import random
 import textwrap
 import simplejson as json
 import aspell
+from subprocess import Popen, PIPE
 
-COMMANDS = frozenset(('google', 'wikipedia', 'wiki', 'define', 'translate', 'spell', 'lsl',))
+COMMANDS = frozenset(('google', 'wikipedia', 'wiki', 'define', 'translate', 'spell', 'lsl', 'uptime'))
 
 # Various UAs from Safari's Develop menu.
 USER_AGENTS = (
@@ -157,3 +158,5 @@ def message(irc, channel, origin, command, args):
             else:
                 irch.message(irc, channel, matches.group(2).replace(r'\n', '\n'), tag='LSL')
                 irch.message(irc, channel, "Sleep: ~B%s~B seconds." % matches.group(1), tag='LSL')
+    elif command == 'uptime':
+        irch.message(irc, channel, Popen(["uptime"], stdout=PIPE).communicate()[0].strip())

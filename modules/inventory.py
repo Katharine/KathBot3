@@ -12,7 +12,31 @@ def parse_actions(irc, channel, user, message):
     irch = m('irc_helpers')
     words, pattern = make_pattern(irc, channel, user, message)
     length = len(pattern)
-    if pattern[0:3] == ['action', 'item', 'nick'] and length >= 3:
+    if pattern[0:4] == ['action', 'amount', 'item', 'nick'] and length >= 4:
+        if words[0] not in give_words:
+            return
+        #/me gives amount item to nick
+        #
+        target = words[3]
+        amount = words[1]
+        item = words[2]
+        irch.message(irc, channel, '(%s lost %s %s)' % (user.nick, amount, item))
+        irch.message(irc, channel, '(%s acquired %s %s)' % (target.nick, amount, item))
+        revoke_item(user.uid, item_id_by_name(item), amount)
+        give_item(target.uid, item_id_by_name(item), amount)
+    elif pattern[0:4] == ['action', 'nick', 'amount', 'item'] and length >= 4:
+        if words[0] not in give_words:
+            return
+        #/me gives nick amount item
+        #
+        target = words[1]
+        amount = words[2]
+        item = words[3]
+        irch.message(irc, channel, '(%s lost %s %s)' % (user.nick, amount, item))
+        irch.message(irc, channel, '(%s acquired %s %s)' % (target.nick, amount, item))
+        revoke_item(user.uid, item_id_by_name(item), amount)
+        give_item(target.uid, item_id_by_name(item), amount)
+    elif pattern[0:3] == ['action', 'item', 'nick'] and length >= 3:
         if words[0] not in give_words:
             return
         #/me gives an item to nick
@@ -21,8 +45,8 @@ def parse_actions(irc, channel, user, message):
         item = words[1]
         irch.message(irc, channel, '(%s lost one %s)' % (user.nick, item))
         irch.message(irc, channel, '(%s acquired one %s)' % (target.nick, item))
-        revoke_item(user.uid, item_id_by_name(item))
-        give_item(target.uid, item_id_by_name(item))
+        revoke_item(user.uid, item_id_by_name(item), 1)
+        give_item(target.uid, item_id_by_name(item), 1)
     elif pattern[0:3] == ['action', 'nick', 'item'] and length >= 3:
         if words[0] not in give_words:
             return
@@ -32,8 +56,8 @@ def parse_actions(irc, channel, user, message):
         item = words[2]
         irch.message(irc, channel, '(%s lost one %s)' % (user.nick, item))
         irch.message(irc, channel, '(%s acquired one %s)' % (target.nick, item))
-        revoke_item(user.uid, item_id_by_name(item))
-        give_item(target.uid, item_id_by_name(item))
+        revoke_item(user.uid, item_id_by_name(item), 1)
+        give_item(target.uid, item_id_by_name(item), 1)
     elif pattern[0:3] == ['action', 'nick', 'interaction'] and length >= 3:
         if words[0] not in give_words:
             return
@@ -50,6 +74,24 @@ def parse_actions(irc, channel, user, message):
         interaction = words[0]
         give_stat(target.uid, stat_id_by_name(interaction))
         irch.message(irc, channel, '(%s has been %s)' % (target.nick, get_stat_fullname(stat_id_by_name(interaction))))
+    elif pattern[0:3] == ['action', 'amount', 'item'] and length >= 3:
+        if words[0] in trash_words:
+            #/me drops amount item
+            #
+            action = words[0]
+            amount = words[1]
+            item = words[2]
+            irch.message(irc, channel, '(%s lost %s %s)' % (user.nick, amount, item))
+            revoke_item(user.uid, item_id_by_name(item), amount)
+        elif words[0] in destruct_words:
+            #/me explodes amount item
+            #
+            action = words[0]
+            amount = words[1]
+            item = words[2]
+            irch.message(irc, channel, '(%s lost %s %s, but gained some ashes)' % (user.nick, amount, item))
+            revoke_item(user.uid, item_id_by_name(item), amount)
+            give_item(user.uid, item_id_by_name('Ashes'), amount)
     elif pattern[0:2] == ['action', 'item'] and length >= 2:
         if words[0] in trash_words:
             #/me drops an item
@@ -57,15 +99,15 @@ def parse_actions(irc, channel, user, message):
             action = words[0]
             item = words[1]
             irch.message(irc, channel, '(%s lost one %s)' % (user.nick, item))
-            revoke_item(user.uid, item_id_by_name(item))
+            revoke_item(user.uid, item_id_by_name(item), 1)
         elif words[0] in destruct_words:
             #/me explodes her item
             #
             action = words[0]
             item = words[1]
             irch.message(irc, channel, '(%s lost one %s, but gained some ashes)' % (user.nick, item))
-            revoke_item(user.uid, item_id_by_name(item))
-            give_item(user.uid, item_id_by_name('Ashes'))
+            revoke_item(user.uid, item_id_by_name(item), 1)
+            give_item(user.uid, item_id_by_name('Ashes'), 1)
         elif words[0] in examine_words:
             #/me looks at item
             item = words[1]
@@ -85,6 +127,10 @@ def make_pattern(irc, channel, user, message):
         if item_exists(word) and user_has_item(user.uid, word):
             pattern.append('item')
             words.append(word)
+        #Yucky hopefully-temporary hack to slice s's off words to *try* and lazily find plurals.
+        if item_exists(word[0:len(word)-1]) and user_has_item(user.uid, word[0:len(word)-1]):
+            pattern.append('item')
+            words.append(word)
         if word in actions:
             pattern.append('action')
             words.append(word)
@@ -99,8 +145,13 @@ def make_pattern(irc, channel, user, message):
                 pattern.append('item')
                 words.append(word + " " + temp[index+1])
         except:
-            index += 1
-            continue
+            try:
+                if int(word) > 0:
+                    pattern.append('amount')
+                    words.append(word)
+            except:
+                index += 1
+                continue
         index += 1
     return words, pattern
 
@@ -128,31 +179,31 @@ def item_exists(query):
     return False
 
 ###
-def give_item(userid, itemid):
+def give_item(userid, itemid, count, amount):
     count = m('datastore').query('SELECT count FROM inventory_user_items WHERE userid = ? AND itemid = ?', userid, itemid)
     if len(count) == 0:
-        m('datastore').execute('INSERT INTO inventory_user_items (userid, itemid, count) VALUES (?, ?, ?)', userid, itemid, 1)
+        m('datastore').execute('INSERT INTO inventory_user_items (userid, itemid, count) VALUES (?, ?, ?)', userid, itemid, amount)
     else:
-        m('datastore').execute("UPDATE inventory_user_items SET count = ? WHERE userid = ? AND itemid = ?", count[0][0] + 1, userid, itemid)
+        m('datastore').execute("UPDATE inventory_user_items SET count = ? WHERE userid = ? AND itemid = ?", count[0][0] + amount, userid, itemid)
 
 ###
-def sudo_give_item(userid, itemid):
+def sudo_give_item(userid, itemid, amount):
     count = m('datastore').query('SELECT count FROM inventory_user_items WHERE userid = ? AND itemid = ?', userid, itemid)
     if len(count) == 0:
-        m('datastore').execute('INSERT INTO inventory_user_items (userid, itemid, count) VALUES (?, ?, ?)', userid, itemid, 1)
+        m('datastore').execute('INSERT INTO inventory_user_items (userid, itemid, count) VALUES (?, ?, ?)', userid, itemid, amount)
     else:
-        m('datastore').execute("UPDATE inventory_user_items SET count = ? WHERE userid = ? AND itemid = ?", count[0][0] + 1, userid, itemid)
+        m('datastore').execute("UPDATE inventory_user_items SET count = ? WHERE userid = ? AND itemid = ?", count[0][0] + amount, userid, itemid)
 
 ###       
-def revoke_item(userid, itemid):
+def revoke_item(userid, itemid, amount):
     count = m('datastore').query('SELECT count FROM inventory_user_items WHERE userid = ? AND itemid = ?', userid, itemid)
     if len(count) == 0:
         #Uh..They don't have the item. >.>
         return #Return and do nothing, though we should never get here.
-    elif count[0][0] - 1 <= 0:
+    elif count[0][0] - amount <= 0:
         m('datastore').execute('DELETE FROM inventory_user_items WHERE userid = ? AND itemid = ?', userid, itemid)
     else:
-        m('datastore').execute("UPDATE inventory_user_items SET count = ? WHERE userid = ? AND itemid = ?", count[0][0] - 1, userid, itemid)
+        m('datastore').execute("UPDATE inventory_user_items SET count = ? WHERE userid = ? AND itemid = ?", count[0][0] - amount, userid, itemid)
 
 def give_stat(userid, itemid):
     
@@ -363,31 +414,62 @@ def message(irc, channel, origin, command, args):
             else:
                 irch.message(irc, channel, "You don't have one of those to examine.")
     elif command == "give":
-        #!give nick item
-        item = args[1]
-        target = args[0]
-        target = make_user(irc, target)
-        if not nick_is_present(irc, channel, target.nick):
-            return #Can't give to someone who isn't here.
-        if not user_has_item(userid, item_id_by_name(item)):
-            irch.message(irc, channel, "You can not give away something you don't have.")
-            return
-        irch.message(irc, channel, '[%s lost one %s.]' % (origin.nick, item))
-        irch.message(irc, channel, '[%s acquired one %s.]' % (target.nick, item))
-        revoke_item(userid, item_id_by_name(item))
-        give_item(target.uid, item_id_by_name(item))
+        #!give nick amount item
+        if len(args) == 2:
+            item = args[1]
+            target = args[0]
+            target = make_user(irc, target)
+            if not nick_is_present(irc, channel, target.nick):
+                return #Can't give to someone who isn't here.
+            if not user_has_item(userid, item_id_by_name(item)):
+                irch.message(irc, channel, "You can not give away something you don't have.")
+                return
+            irch.message(irc, channel, '[%s lost one %s.]' % (origin.nick, item))
+            irch.message(irc, channel, '[%s acquired one %s.]' % (target.nick, item))
+            revoke_item(userid, item_id_by_name(item))
+            give_item(target.uid, item_id_by_name(item), 1)
+        elif len(args) == 3:
+            item = args[2]
+            amount = args[1]
+            target = args[0]
+            target = make_user(irc, target)
+            if not nick_is_present(irc, channel, target.nick):
+                return #Can't give to someone who isn't here.
+            if not user_has_item(userid, item_id_by_name(item)):
+                irch.message(irc, channel, "You can not give away something you don't have.")
+                return
+            irch.message(irc, channel, '[%s lost %s %s.]' % (origin.nick, amount, item))
+            irch.message(irc, channel, '[%s acquired %s %s.]' % (target.nick, amount, item))
+            revoke_item(userid, item_id_by_name(item), amount)
+            give_item(target.uid, item_id_by_name(item), amount)
     elif command == 'sudogive':
-        target = make_user(irc, args[0])
-        item = item_id_by_name(' '.join(args[1:]))
-        if not item_exists(item_name_by_id(item)):
-            return
-        sudo_give_item(target.uid, item)
-        irch.message(irc, channel, '[%s acquired one %s.]' % (target.nick, item_name_by_id(item)))
+        #!sudogive nick amount item
+        if len(args) == 2:
+            target = make_user(irc, args[0])
+            item = item_id_by_name(' '.join(args[1:]))
+            if not item_exists(item_name_by_id(item)):
+                return
+            sudo_give_item(target.uid, item, 1)
+            irch.message(irc, channel, '[%s acquired one %s.]' % (target.nick, item_name_by_id(item)))
+        elif len(args) == 3:
+            target = make_user(irc, args[0])
+            item = item_id_by_name(' '.join(args[2:]))
+            amount = args[1]
+            if not item_exists(item_name_by_id(item)):
+                return
+            sudo_give_item(target.uid, item, amount)
+            irch.message(irc, channel, '[%s acquired %s %s.]' % (target.nick, amount, item_name_by_id(item)))
     elif command == 'trash' or command == 'delete':
-        #!trash item   -or-   !delete item
-        item = args[0]
-        irch.message(irc, channel, '[%s lost one %s.]' % (origin.nick, item))
-        revoke_item(userid, item_id_by_name(item))
+        #!trash amount item   -or-   !delete amount item
+        if len(args) == 2:
+            item = args[1]
+            amount = args[0]
+            irch.message(irc, channel, '[%s lost one %s.]' % (origin.nick, item))
+            revoke_item(userid, item_id_by_name(item), 1)
+        elif len(args) == 1:
+            item = args[0]
+            irch.message(irc, channel, '[%s lost %s %s.]' % (origin.nick, amount, item))
+            revoke_item(userid, item_id_by_name(item), 1)
     elif command == 'addeffect':
         args = ' '.join(args)
         if args.find('{') and args.find('}'):
