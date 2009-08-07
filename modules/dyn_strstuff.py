@@ -62,7 +62,7 @@ def tag_indefinite(node, context):
         return "a %s" % phrase
 
 def tag_substr(node, context):
-    #try:
+    try:
         parts = node.attribute.split(':')
         if parts[0] == '':
             a = None
@@ -83,5 +83,5 @@ def tag_substr(node, context):
                 c = None
             
             return m('dynamic').stringify(m('dynamic').treelevel(node, context)).__getitem__(slice(a, b, c))
-   # except:
-    #    return '~B[substring fail]~B'
+    except:
+        return '~B[substring fail]~B'
