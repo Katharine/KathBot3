@@ -256,6 +256,20 @@ def GetCommentsForAsset(assetid):
 
 
 ############# ASSET INFO (Tags, Description) ##############
+class Asset:
+    def __init__(self, aid='', name='', thumb='', image='', author='', created=None, description=None, parent=None, tags=None, rating=0, atype=''):
+        self.aid = long(aid)
+        self.name = name
+        self.thumb = thumb
+        self.image = image
+        self.author = author
+        self.created = created
+        self.description = description
+        self.parent = parent
+        self.tags = tags
+        self.rating = float(rating)
+        self.atype = atype
+    
 def GetDescriptionForAsset(assetid):
     url = InfoForAssetURL(assetid)
     myxml = GetXMLForREST(url)
@@ -283,8 +297,32 @@ def GetTagsForAsset(assetid):
         
 
 ############# User (assets, buddies, profile pic, sporecasts, achievements for user) ##############
-def GetAssetIdsForUser(username, assettype = ""):
-    url = AssetsForUserURL(username, 0, 5000)
+def GetAssetDataForUser(username, assettype = "", start=0, limit=5000):
+    url = AssetsForUserURL(username, start, limit)
+    myxml = GetXMLForREST(url)
+    assets = []
+    if(myxml):
+        assetNodes = TryGetNodes(myxml, "asset")
+        for node in assetNodes:
+            aid = GetTagValue(node, 'id')
+            assets.append(Asset(
+                aid=aid,
+                name=GetTagValue(node, 'name'),
+                thumb=GetTagValue(node, 'thumb'),
+                image=GetTagValue(node, 'image'),
+                author=GetTagValue(node, 'author'),
+                created=MakeDateObject(GetTagValue(node, 'created')),
+                description=GetTagValue(node, 'description'),
+                parent=GetTagValue(node, 'parent'),
+                tags=[x.strip() for x in GetTagValue(node, 'tags').split(',') if x.upper() != "NULL"],
+                rating=GetTagValue(node, 'rating'),
+                atype=GetTagValue(node, 'type')
+            ))
+        myxml.unlink()
+    return assets
+
+def GetAssetIdsForUser(username, start=0, limit=5000):
+    url = AssetsForUserURL(username, start, limit)
     myxml = GetXMLForREST(url)
     assetIds = ""
     if(myxml):

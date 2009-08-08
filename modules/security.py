@@ -74,6 +74,17 @@ def get_user_id(user):
     
     return None
 
+def get_user_nick(uid):
+    results = m('datastore').query("SELECT nick FROM users WHERE id = ?", uid)
+    if len(results) > 0:
+        return results[0][0]
+    else:
+        return None
+
+def get_nick_aliases(nick):
+    results = m('datastore').query("SELECT alias FROM aliases WHERE canon = ?", nick)
+    return [x[0] for x in results]
+
 def get_user_access(user):
     uid = get_user_id(user)
     if uid is None:

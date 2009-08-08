@@ -203,6 +203,20 @@ def create_user(irc, nick):
         user.hostname = existing.hostname
     return user
 
+def uid_channels(irc, uid):
+    nick = m('security').get_user_nick(uid)
+    aliases = set([x.lower() for x in m('security').get_nick_aliases(nick)])
+    aliases.add(nick.lower())
+    channels = {}
+    for channel_name in network(irc):
+        channel = network(irc)[channel_name]
+        intersection = aliases.intersection(channel.users.keys())
+        if len(intersection) != 0:
+            nick = channel.users[intersection.pop()].nick
+            channels[channel.name] = nick
+    return channels
+    
+
 class Channel(object):
     users = None
     topic = ''

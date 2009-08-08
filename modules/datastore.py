@@ -90,8 +90,13 @@ class KBDict(dict):
     def serialise(self, value):
         if isinstance(value, str):
             return value
-        elif isinstance(value, int):
-            return str(value)
+        elif isinstance(value, int) or isinstance(value, long):
+            return value.__repr__()
+        elif isinstance(value, bool):
+            if value:
+                return '__TRUE__'
+            else:
+                return '__FALSE__'
         elif isinstance(value, float):
             return str(value)
         elif value is None:
@@ -101,7 +106,15 @@ class KBDict(dict):
     
     def unserialise(self, value):
         value = str(value)
+        if value == '':
+            return value
+        if value == '__TRUE__':
+            return True
+        elif value == '__FALSE__':
+            return False
         try:
+            if value[-1].upper() == 'L':
+                return long(value)
             i = int(value)
             f = float(value)
             if i - f < 0.0000001:
@@ -140,6 +153,9 @@ class UserSettings(KBDict):
     def __setitem__(self, key, value):
         execute("REPLACE INTO user_settings (uid, setting, value) VALUES (?, ?, ?)", self.uid, key, self.serialise(value))
         return value
+        
+    def __delitem__(self, key):
+        execute("DELETE FROM user_settings WHERE setting = ? AND uid = ?", key, self.uid)
 
     def keys(self):
         return [x[0] for x in query("SELECT setting FROM user_settings WHERE uid = ?", self.uid)]
@@ -176,6 +192,9 @@ class ChannelSettings(KBDict):
         execute("REPLACE INTO channel_settings (network, channel, setting, value) VALUES (?, ?, ?, ?)", self.network, self.channel, key, self.serialise(value))
         return value
     
+    def __delitem__(self, key):
+        execute("DELETE FROM channel_settings WHERE network = ? AND channel = ? AND setting = ?", self.network, self.channel, key)
+    
     def keys(self):
         return [x[0] for x in query("SELECT setting FROM channel_settings WHERE network = ? AND channel = ?", self.network, self.channel)]
 
@@ -189,6 +208,9 @@ class GlobalSettings(KBDict):
     def __setitem__(self, key, value):
         execute("REPLACE INTO global_settings (setting, value) VALUES (?, ?)", key, self.serialise(value))
         return value
+        
+    def __delitem__(self, key):
+        execute("DELETE FROM global_settings WHERE setting = ?", key)
     
     def keys(self):
         return [x[0] for x in query("SELECT setting FROM global_settings")]
