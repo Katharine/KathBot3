@@ -1,5 +1,6 @@
 import sqlite3
 import threading
+import pickle
 from Queue import Queue
 
 class sqlite(threading.Thread):
@@ -85,6 +86,36 @@ class KBDict(dict):
             return self.__getitem__(key)
         except KeyError:
             return default
+    
+    def serialise(self, value):
+        if isinstance(value, str):
+            return value
+        elif isinstance(value, int):
+            return str(value)
+        elif isinstance(value, float):
+            return str(value)
+        elif value is None:
+            return None
+        else:
+            return sqlite3.Binary('__PICKLED_DATA__' + pickle.dumps(value, pickle.HIGHEST_PROTOCOL))
+    
+    def unserialise(self, value):
+        value = str(value)
+        try:
+            i = int(value)
+            f = float(value)
+            if i - f < 0.0000001:
+                return i
+            else:
+                return f
+        except:
+            if value.startswith('__PICKLED_DATA__'):
+                try:
+                    return pickle.loads(value[16:])
+                except:
+                    return value
+            else:
+                return value
 
 class UserSettingsCollection(dict):
     def __getitem__(self, key):
@@ -104,10 +135,10 @@ class UserSettings(KBDict):
         result = query("SELECT value FROM user_settings WHERE setting = ? AND uid = ?", key, self.uid)
         if len(result) == 0:
             raise KeyError, key
-        return result[0][0]
+        return self.unserialise(result[0][0])
     
     def __setitem__(self, key, value):
-        execute("REPLACE INTO user_settings (uid, setting, value) VALUES (?, ?, ?)", self.uid, key, value)
+        execute("REPLACE INTO user_settings (uid, setting, value) VALUES (?, ?, ?)", self.uid, key, self.serialise(value))
         return value
 
     def keys(self):
@@ -139,10 +170,10 @@ class ChannelSettings(KBDict):
         result = query("SELECT value FROM channel_settings WHERE network = ? AND channel = ? AND setting = ?", self.network, self.channel, key)
         if len(result) == 0:
             raise KeyError, key
-        return result[0][0]
+        return self.unserialise(result[0][0])
     
     def __setitem__(self, key, value):
-        execute("REPLACE INTO channel_settings (network, channel, setting, value) VALUES (?, ?, ?, ?)", self.network, self.channel, key, value)
+        execute("REPLACE INTO channel_settings (network, channel, setting, value) VALUES (?, ?, ?, ?)", self.network, self.channel, key, self.serialise(value))
         return value
     
     def keys(self):
@@ -153,10 +184,10 @@ class GlobalSettings(KBDict):
         result = query("SELECT value FROM global_settings WHERE setting = ?", key)
         if len(result) == 0:
             raise KeyError, key
-        return result[0][0]
+        return self.unserialise(result[0][0])
     
     def __setitem__(self, key, value):
-        execute("REPLACE INTO global_settings (setting, value) VALUES (?, ?)", key, value)
+        execute("REPLACE INTO global_settings (setting, value) VALUES (?, ?)", key, self.serialise(value))
         return value
     
     def keys(self):
