@@ -2,6 +2,7 @@ import sys
 import logging
 import traceback
 import threading
+import os
 
 class ModuleAlreadyLoaded(Exception): pass
 class ModuleNotLoaded(ImportError): pass
@@ -57,12 +58,22 @@ def load_module(module):
     mods[module].m = lambda module: get_module(module)
     mods[module].ModuleNotLoaded = ModuleNotLoaded
     mods[module].logger = logging.getLogger(module)
+    
+    # Woo, modules with dependencies.
+    if os.path.isdir('modules/%s' % module):
+        files = os.listdir('modules/%s' % module)
+        for filename in files:
+            if filename.endswith('.py') and filename != '__init__.py':
+                logging.info("Importing submodule %s.%s" % (module, filename[:-3]))
+                setattr(mods[module], filename[:-3], getattr(__import__('%s.%s' % (module, filename[:-3]), globals(), locals(), [], -1), filename[:-3]))
+    
     try:
         init_module = getattr(mods[module], 'init')
     except AttributeError:
         pass
     else:
         init_module()
+    
     call_hook('loaded', module)
     logging.info("Loaded module %s", module)
     
@@ -80,4 +91,13 @@ def unload_module(module):
     
     del mods[module]
     del sys.modules['modules.%s' % module]
+    
+    # Woo, modules with dependencies.
+    if os.path.isdir('modules/%s' % module):
+        files = os.listdir('modules/%s' % module)
+        for filename in files:
+            if filename.endswith('.py') and filename != '__init__.py':
+                logging.info("Unimporting submodule %s.%s" % (module, filename[:-3]))
+                del sys.modules['modules.%s.%s' % (module, filename[:-3])]
+    
     call_hook('unloaded', module)

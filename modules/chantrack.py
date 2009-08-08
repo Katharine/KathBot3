@@ -30,7 +30,7 @@ def init():
 
 def channel_list(irc, origin, args):
     if args[1] == irc.nick:
-        channels = [x.lstrip('@+') for x in args[2].split(' ')]
+        channels = [x.lstrip(''.join(PREFIX_MODES.keys())) for x in args[2].split(' ')]
         for channel in channels:
             irc.raw("NAMES %s" % channel)
             irc.raw("MODE %s" % channel)
