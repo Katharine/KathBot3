@@ -10,8 +10,9 @@ import math
 import textwrap
 import inspect
 
-parent_tags = set(('if', 'else', 'choose', 'choice', 'c', '|', 'set', 'try', 'math', 'repeat', 'while', 'get', 'func', 'switch', 'case'))
+parent_tags = set(('if', 'else', 'choose', 'choice', 'c', '|', 'set', 'try', 'math', 'repeat', 'while', 'get', 'func', 'switch', 'case', 'list', 'append', 'for'))
 grouping_tags = set(('root', 'else', 'choice', 'c', '|', 'case'))
+barhack_tags = set(('choose', 'switch', 'list', 'append'))
 registered_tags = {} # tag => callback
 module_registrations = {} # module => list
 
@@ -124,6 +125,8 @@ class TagContext(dict):
         for i in range(0, len(self.args)):
             self.variables['arg%s' % i] = self.args[i]
 
+        self.variables['arg'] = self.args
+
 def stringify(string):
     if isinstance(string, basestring):
         return string
@@ -160,7 +163,7 @@ def parse_tree(line):
                         current_node = current_node.parent
                     elif node.name == 'if' and current_node.name == 'else' and current_node.parent and current_node.parent.name == 'if':
                         current_node = current_node.parent.parent
-                    elif current_node.name == '|' and (node.name == 'choose' or node.name == 'switch'):
+                    elif current_node.name == '|' and node.name in barhack_tags:
                         current_node = current_node.parent.parent
                     else:
                         raise ParseError, "Mismatched closing [/%s]; expecting [/%s]." % (node.name, current_node.name)
@@ -210,6 +213,43 @@ def get_var(name, context, attribute=None):
             output = treelevel(value, context)
             context.variables['attr'] = oldattr
             return output
+        elif isinstance(value, list) or isinstance(value, basestring):
+            # This is an array variable, yay
+            # These are special in that they produce bacon on thursdays
+            # Parse the indexes from the thingy
+            try:
+                # Ok, yes, I stole this from dyn_strstuff
+                # Gave it an IOU for a cookie, so its all good
+                parts = attribute.split(" ")
+                indexpart = parts[0]
+                seperator = ''
+                if len(parts) > 1:
+                    seperator = ' '.join(parts[1:])
+                elif isinstance(value, list):
+                    seperator = ' '
+
+                parts = indexpart.split(":") 
+                if parts[0] == '':
+                    a = None
+                else:
+                    a = int(get_var_maybe(parts[0], context))
+                
+                if len(parts) == 1:
+                    return stringify(value[a])
+                else:
+                    if parts[1] == '':
+                        b = None
+                    else:
+                        b = int(get_var_maybe(parts[1], context))
+                
+                    if len(parts) > 2:
+                        c = int(get_var_maybe(parts[2], context))
+                    else:
+                        c = None
+                    
+                    return stringify(seperator.join(value.__getitem__(slice(a, b, c))))
+            except:
+                return "[ERR]"
         else:
             return value
     else:
@@ -560,6 +600,10 @@ def tag_random(node, context):
     r = node.attribute.split(':')
     try:
         a = get_var_maybe(r[0], context)
+
+        if isinstance(a, list):
+            return random.choice(a)
+
         b = get_var_maybe(r[1], context)
         return stringify(random.randint(int(a), int(b)))
     except:
@@ -704,3 +748,46 @@ def tag_switch(node, context):
             return treelevel(child, context)
             break
     return ''
+
+def tag_list(node, context):
+    varname = node.attribute
+    value = []
+    for child in node.children:
+        value.append(dotree(child, context))
+    context[varname] = value
+    return ''
+
+def tag_append(node, context):
+    varname = node.attribute
+    value = []
+    varval = context[varname]
+    if isinstance(varval, list):
+        value = context[varname]
+    elif isinstance(varval, basestring):
+        value = [varval]
+    else:
+        return "~B[Can not append to unknown variable type]~B"
+
+    for child in node.children:
+        value.append(dotree(child, context))
+
+    if isinstance(varval, basestring):
+        value = ''.join(value)
+    
+    context[varname] = value
+    return ''
+
+def tag_for(node, context):
+    parts = node.attribute.split(' in ')
+    varname = parts[0]
+    varlist = parts[1]
+
+    vals = get_var(varlist)
+
+    ret = ''
+
+    for val in vals:
+        context[varname] = val
+        ret += treelevel(node, context)
+    
+    return ret
