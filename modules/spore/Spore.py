@@ -265,7 +265,7 @@ class Asset:
         self.author = author
         self.created = created
         self.description = description
-        self.parent = parent
+        self.parent = parent if parent.upper() != 'NULL' else None
         self.tags = tags
         self.rating = float(rating)
         self.atype = atype

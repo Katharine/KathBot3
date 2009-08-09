@@ -84,8 +84,15 @@ def check_stuff():
             continue
         
         last_known_creation = m('datastore').users[uid]['spore_last_creation']
+        already_done = set()
         for creation in creations:
+            if creation.name in already_done:
+                continue
             if creation.aid <= last_known_creation:
                 break
-            announce(uid, '~B%%(nick)s~B just made ~B%s~B, a new ~B%s~B!' % (creation.name, SPORE_TYPES[creation.atype]))
+            already_done.add(creation.name)
+            if creation.parent is None:
+                announce(uid, '~B%%(nick)s~B just made ~B%s~B, a new ~B%s~B!' % (creation.name, SPORE_TYPES[creation.atype]))
+            else:
+                announce(uid, '~B%%(nick)s~B evolved ~B%s~B, a ~B%s~B!' % (creation.name, SPORE_TYPES[creation.atype]))
         m('datastore').users[uid]['spore_last_creation'] = creations[0].aid
