@@ -113,21 +113,6 @@ server = None
 def init():
     global server
     server = WebServer()
-    add_dyn_tag()
-    add_hook('loaded', loaded)
-
-def add_dyn_tag():
-    try:
-        m('dynamic').add_tag('localhttp', tag_localhttp)
-    except ModuleNotLoaded:
-        pass
-
-def loaded(module):
-    if module == 'dynamic':
-        add_dyn_tag()
-
-def tag_localhttp(node, context):
-    return get_root_address()
 
 def shutdown():
     server.shutdown()
