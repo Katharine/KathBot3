@@ -23,6 +23,8 @@ modules = (
     'links',
     'vote',
     'wmessage',
+    'dyn_webstuff',
+    'dyn_strstuff',
     #'lastfm',
     #'irclogger'
 )
