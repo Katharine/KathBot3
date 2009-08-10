@@ -751,6 +751,8 @@ def tag_switch(node, context):
             break
     return ''
 
+# Selig was here
+
 def tag_list(node, context):
     varname = node.attribute
     value = []
@@ -794,3 +796,45 @@ def tag_for(node, context):
         ret += treelevel(node, context)
     
     return ret
+
+def tag_delete(node, context):
+    parts = node.attribute.split(" ")
+    varname = parts[0]
+    try:
+        index = parts[1]
+    except:
+        index = ''
+
+    value = context.variables[varname]
+
+    if index == '' or isinstance(value, basestring):
+        del context.variables[varname]
+
+    try:
+        parts = index.split(':')
+        if parts[0] == '':
+            a = None
+        else:
+            a = int(get_var_maybe(parts[0], context))
+        
+        if len(parts) == 1:
+            what = a
+        else:
+            if parts[1] == '':
+                b = None
+            else:
+                b = int(get_var_maybe(parts[1], context))
+        
+            if len(parts) > 2:
+                c = int(get_var_maybe(parts[2], context))
+            else:
+                c = None
+            what = slice(a, b, c)
+
+        context.variables[varname].__delitem__(what)
+    except:
+        # We should probably error or soemthing
+        pass
+    finally:
+        return ''
+
