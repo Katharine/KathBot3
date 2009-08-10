@@ -27,10 +27,14 @@ def tag_regex(node, context):
 
     context.variables["match0"] = reg.group(0)
 
+    context["match"] = [reg.group(0)]# + results
+
     i = 1
     for res in results:
         context.variables["match%s" % i] = res
         i += 1
+        context["match"].append(res)
+    
 
     return ""
 

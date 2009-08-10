@@ -39,7 +39,7 @@ def tag_cset(node, context):
     destvar = m('dynamic').treelevel(node, context)
 
     try:
-        m('datastore').channels[(context.irc, context.channel)]['dyn_' + destvar] = context[sourcevar]
+        m('datastore').channels[(context.irc, context.channel)]['dyn_' + destvar] = context.variables[sourcevar]
     finally:
         return ""
 
@@ -57,6 +57,6 @@ def tag_pset(node, context):
     destvar = m('dynamic').treelevel(node, context)
 
     try:
-        m('datastore').general['dyn_' + destvar] = context[sourcevar]
+        m('datastore').general['dyn_' + destvar] = context.variables[sourcevar]
     finally:
         return ""
