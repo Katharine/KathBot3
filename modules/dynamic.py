@@ -220,6 +220,8 @@ def get_var(name, context, attribute=None):
             try:
                 # Ok, yes, I stole this from dyn_strstuff
                 # Gave it an IOU for a cookie, so its all good
+                if isinstance(value, basestring) and attribute == '':
+                    return value
                 parts = attribute.split(" ")
                 indexpart = parts[0]
                 seperator = ''
@@ -782,11 +784,12 @@ def tag_for(node, context):
     varname = parts[0]
     varlist = parts[1]
 
-    vals = get_var(varlist)
+    vals = context[varlist] #get_var(varlist)
 
     ret = ''
 
     for val in vals:
+        print "Val:(%s) %s" % (type(val), val)
         context[varname] = val
         ret += treelevel(node, context)
     
