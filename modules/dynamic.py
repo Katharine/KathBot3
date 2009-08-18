@@ -361,7 +361,7 @@ def command_has_existed(command):
 
 def update_command(command, source, origin, create=True):
     sql = "INSERT INTO dynamic (command, source, version, creator) VALUES (?, ?, %s, ?)"
-    if isinstance(origin, int):
+    if isinstance(origin, int) or origin is None:
         uid = origin
     else:
         uid = m('security').get_user_id(origin)
@@ -465,7 +465,7 @@ def message(irc, channel, origin, command, args):
             if not old:
                 m('irc_helpers').message(irc, channel, "That revision has never existed.")
             else:
-                update_command(args[0], old[0][0], int(old[0][1]))
+                update_command(args[0], old[0][0], old[0][1])
                 m('irc_helpers').message(irc, channel, "Reverted ~B%s~B to revision ~B%s~B." % (args[0], args[1]))
         elif command == 'eval':
             try:
