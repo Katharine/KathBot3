@@ -347,15 +347,31 @@ def unloaded(module):
                 parent_tags.remove(tag)
         del module_registrations[module]
 
-def find_command(command):
-    result = m('datastore').query("SELECT source FROM dynamic WHERE command = ?", command)
+def find_command(command, version = None):
+    if version is None:
+        result = m('datastore').query("SELECT source FROM dynamic WHERE command = ? ORDER BY version DESC LIMIT 1", command)
+    else:
+        result = m('datastore').query("SELECT source FROM dynamic WHERE command = ? AND version = ?", command, version)
     if len(result) == 0:
         return None
     return result[0][0]
 
+def update_command(command, source, origin, create=True):
+    sql = "INSERT INTO dynamic (command, source, version, creator) VALUES (?, ?, %s, ?)"
+    uid = m('security').get_user_id(origin)
+    if m('datastore').query("SELECT version FROM dynamic WHERE command = ?", command):
+        sql = sql % "(SELECT version FROM dynamic WHERE command = ? ORDER BY version DESC LIMIT 1) + 1"
+        args = (command, source, command, uid)
+    else:
+        if not create:
+            return
+        sql = sql % "1"
+        args = (command, source, uid)
+    m('datastore').execute(sql, *args)
+
 def message(irc, channel, origin, command, args):
     irc_helpers = m('irc_helpers')
-    if command in ('add', 'delete', 'source', 'append', 'eval'):
+    if command in ('add', 'delete', 'source', 'append', 'eval', 'revisions',):
         if not m('security').check_action_permissible(origin, "%s" % command):
             return
         
@@ -363,9 +379,8 @@ def message(irc, channel, origin, command, args):
             if len(args) < 2:
                 irc_helpers.message(irc, channel, "You must provide a command name and something for it to do.")
             else:
-                c = args[0]
                 source = ' '.join(args[1:])
-                m('datastore').execute("REPLACE INTO dynamic (command, source) VALUES (?, ?)", c, source)
+                update_command(args[0], ' '.join(args[1:]), origin)
                 irc_helpers.message(irc, channel, "Added command ~B%s~B." % args[0])
         elif command == 'append':
             if len(args) < 2:
@@ -377,27 +392,45 @@ def message(irc, channel, origin, command, args):
                     irc_helpers.message(irc, channel, "That command doesn't exist yet.")
                     return
                 source = original + ' '.join(args[1:])
-                m('datastore').execute("UPDATE dynamic SET source = ? WHERE command = ?", source, c)
+                update_command(c, source, origin)
                 irc_helpers.message(irc, channel, "Updated ~B%s~B." % c)
         elif command == 'delete':
             if len(args) != 1:
                 irc_helpers.message(irc, channel, "You must specify what you want to delete.")
             else:
-                m('datastore').execute("DELETE FROM dynamic WHERE command = ?", args[0])
+                update_command(args[0], None, origin, create=False)
                 irc_helpers.message(irc, channel, "Deleted command ~B%s~B." % args[0])
         elif command == 'source':
-            if len(args) != 1:
+            if len(args) < 1:
                 irc_helpers.message(irc, channel, "You must specify what you want the source for.")
             else:
-                source = find_command(args[0])
+                if len(args) > 1:
+                    source = find_command(args[0], args[1])
+                else:
+                    source = find_command(args[0])
                 if source is not None:
                     try:
                         source = format_source(parse_tree(source))
                     except ParseError, message:
                         irc_helpers.message(irc, channel, "~BParse error (%s); highlighting disabled.~B" % message)
                     irc_helpers.message(irc, channel, source, tag=args[0])
-                else:
+                elif len(args) == 1:
                     irc_helpers.message(irc, channel, "The command ~B%s~B does not exist." % args[0])
+                elif m('datastore').query("SELECT version FROM dynamic WHERE command = ? and version = ?", args[0], args[1]):
+                    irc_helpers.message(irc, channel, "During that revision, the command had been deleted.")
+                else:
+                    irc_helpers.message(irc, channel, "There has been no revision %s.", args[1])
+        elif command == 'revisions':
+            revisions = m('datastore').query("SELECT version, creator, time FROM dynamic WHERE command = ? ORDER BY version DESC LIMIT 7", args[0])
+            if not revisions:
+                m('irc_helpers').message(irc, channel, "That command has never existed.", tag='dynamic')
+            else:
+                m('irc_helpers').message(irc, channel, "~URevisions of ~B%s~B:~U" % args[0], tag='dynamic')
+                for revision in revisions:
+                    num = revision[0]
+                    creator = m('security').get_user_nick(revision[1])
+                    time = datetime.datetime.strptime(revision[2], '%Y-%m-%d %H:%M:%S')
+                    m('irc_helpers').message(irc, channel, "Revision ~B#%s~B by ~B%s~B - ~B%s~B" % (num, creator, time.strftime('%H:%M, %d/%m/%Y')), tag='dynamic')
         elif command == 'eval':
             try:
                 irc_helpers.message(irc, channel, parseline(irc, origin, args, channel, ' '.join(args).replace(r'\n', '\n')))
