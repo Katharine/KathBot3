@@ -356,9 +356,15 @@ def find_command(command, version = None):
         return None
     return result[0][0]
 
+def command_has_existed(command):
+    return bool(m('datastore').query("SELECT version FROM dynamic WHERE command = ?"))
+
 def update_command(command, source, origin, create=True):
     sql = "INSERT INTO dynamic (command, source, version, creator) VALUES (?, ?, %s, ?)"
-    uid = m('security').get_user_id(origin)
+    if isinstance(origin, int):
+        uid = origin
+    else:
+        uid = m('security').get_user_id(origin)
     if m('datastore').query("SELECT version FROM dynamic WHERE command = ?", command):
         sql = sql % "(SELECT version FROM dynamic WHERE command = ? ORDER BY version DESC LIMIT 1) + 1"
         args = (command, source, command, uid)
@@ -371,7 +377,7 @@ def update_command(command, source, origin, create=True):
 
 def message(irc, channel, origin, command, args):
     irc_helpers = m('irc_helpers')
-    if command in ('add', 'delete', 'source', 'append', 'eval', 'revisions',):
+    if command in ('add', 'delete', 'source', 'append', 'eval', 'revisions', 'revert',):
         if not m('security').check_action_permissible(origin, "%s" % command):
             return
         
@@ -419,18 +425,48 @@ def message(irc, channel, origin, command, args):
                 elif m('datastore').query("SELECT version FROM dynamic WHERE command = ? and version = ?", args[0], args[1]):
                     irc_helpers.message(irc, channel, "During that revision, the command had been deleted.")
                 else:
-                    irc_helpers.message(irc, channel, "There has been no revision %s.", args[1])
+                    irc_helpers.message(irc, channel, "There has been no revision %s." % args[1])
         elif command == 'revisions':
-            revisions = m('datastore').query("SELECT version, creator, time FROM dynamic WHERE command = ? ORDER BY version DESC LIMIT 7", args[0])
+            revisions = m('datastore').query("SELECT version, creator, time, source FROM dynamic WHERE command = ? ORDER BY version DESC LIMIT 7", args[0])
             if not revisions:
                 m('irc_helpers').message(irc, channel, "That command has never existed.", tag='dynamic')
             else:
                 m('irc_helpers').message(irc, channel, "~URevisions of ~B%s~B:~U" % args[0], tag='dynamic')
+                i = 0
                 for revision in revisions:
                     num = revision[0]
-                    creator = m('security').get_user_nick(revision[1])
-                    time = datetime.datetime.strptime(revision[2], '%Y-%m-%d %H:%M:%S')
-                    m('irc_helpers').message(irc, channel, "Revision ~B#%s~B by ~B%s~B - ~B%s~B" % (num, creator, time.strftime('%H:%M, %d/%m/%Y')), tag='dynamic')
+                    if revision[1] is not None:
+                        creator = m('security').get_user_nick(revision[1])
+                    else:
+                        creator = 'Unknown'
+                    if revision[2] is not None:
+                        time = datetime.datetime.strptime(revision[2], '%Y-%m-%d %H:%M:%S').strftime('%H:%M, %d/%m/%Y')
+                    else:
+                        time = 'Unknown'
+                    source = revision[3]
+                    i += 1
+                    if i < len(revisions):
+                        previous = revisions[i][3] or ''
+                    else:
+                        previous = ''
+                    if source is None:
+                        message = 'Command deleted'
+                    elif len(source) < len(previous):
+                        message = 'Deleted %s characters' % (len(previous) - len(source))
+                    elif len(previous) < len(source):
+                        message = 'Added %s characters' % (len(source) - len(previous))
+                    elif previous == source:
+                        message = 'No change'
+                    else:
+                        message = 'Length unchanged'
+                    m('irc_helpers').message(irc, channel, "Revision ~B#%s~B by ~B%s~B (~B%s~B): %s" % (num, creator, time, message), tag='dynamic')
+        elif command == 'revert':
+            old = m('datastore').query("SELECT source, creator FROM dynamic WHERE command = ? AND version = ?", args[0], args[1])
+            if not old:
+                m('irc_helpers').message(irc, channel, "That revision has never existed.")
+            else:
+                update_command(args[0], old[0][0], int(old[0][1]))
+                m('irc_helpers').message(irc, channel, "Reverted ~B%s~B to revision ~B%s~B." % (args[0], args[1]))
         elif command == 'eval':
             try:
                 irc_helpers.message(irc, channel, parseline(irc, origin, args, channel, ' '.join(args).replace(r'\n', '\n')))
@@ -455,12 +491,11 @@ def weblist(request):
     </head>
     <body>
         <h1>Dynamic commands</h1>
-        <ul>
-"""
-    commands = m('datastore').query("SELECT command FROM dynamic")
+        <ul>"""
+    commands = m('datastore').query("SELECT command FROM dynamic GROUP BY command ORDER BY command")
     for command in commands:
         content += """
-        <li>%s</li>""" % command[0]
+            <li>%s</li>""" % command[0]
     
     content += """
         </ul>
