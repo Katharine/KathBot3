@@ -90,6 +90,12 @@ class key(object):
     def __eq__(self, other):
         return str(self) == str(other)
     
+    def __ne__(self, other):
+        return not (self == other)
+    
+    def __nonzero__(self):
+        return (self.uuid.int != 0)
+    
     @staticmethod
     def random():
         return key(UUID.uuid4())

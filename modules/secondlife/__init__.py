@@ -30,8 +30,26 @@ def message(irc, channel, origin, command, args):
     elif command == 'sensor':
         if active_server is not None:
             results = run_sensor()
-            for result in results:
-                m('irc_helpers').message(irc, channel, "%s (%sm)" % (result.name, LSL.llVecDist(result.pos, active_server.position)), tag='SL')
+            if not results:
+                m('irc_helpers').message(irc, channel, "Nobody is near %s." % active_server.description, tag='SL')
+            else:
+                for result in results:
+                    states = []
+                    if result.info & LSL.AGENT_FLYING:
+                        states.append('flying')
+                    if result.info & LSL.AGENT_MOUSELOOK:
+                        states.append('mouselook')
+                    if result.info & LSL.AGENT_SITTING:
+                        states.append('sitting')
+                    if result.info & LSL.AGENT_AWAY:
+                        states.append('away')
+                    if result.info & LSL.AGENT_WALKING:
+                        states.append('walking')
+                    if result.info & LSL.AGENT_BUSY:
+                        states.append('busy')
+                    if not states:
+                        states.append('nothing interesting')
+                    m('irc_helpers').message(irc, channel, "%s (%sm) - %s" % (result.name, LSL.llVecDist(result.pos, active_server.position), ', '.join(states)), tag='SL')
     elif command == 'kick':
         key, name = find_key(args[0])
         if key is None:
@@ -65,12 +83,16 @@ def find_key(name, server=None):
 
 def run_sensor(server=None):
     server = server or active_server
-    stuffs = server.request('sensor').split('\n')
-    results = []
-    for result in stuffs:
-        result = result.split('|')
-        results.append(SensorResult(*result))
-    return results
+    stuffs = server.request('sensor')
+    if not stuffs:
+        return []
+    else:
+        stuffs = stuffs.split('\n')
+        results = []
+        for result in stuffs:
+            result = result.split('|')
+            results.append(SensorResult(*result))
+        return results
 
 def handle_web(request):
     page = request.path.split('/')[2]
