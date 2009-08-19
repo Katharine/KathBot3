@@ -10,6 +10,7 @@ import traceback
 import mimetypes
 import platform
 import socket
+from cgi import parse_qs
 
 web_handlers = {}
 
@@ -41,7 +42,7 @@ class KBHTTPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def do_something(self, method, discard_body=False):
         parts = urlparse.urlparse(self.path)
         self.path = parts[2]
-        self.query = parts[4]
+        self.query = parse_qs(parts[4])
         if self.path == '/':
             self.send_output(generate_index_page(self), discard_body)
         elif self.path.startswith('/static/'):
