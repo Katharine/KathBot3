@@ -30,6 +30,8 @@ class IRC(threading.Thread):
             return
         logging.info("Connected.")
         self.raw("USER %s 8 *: %s" % (self.network.ident, self.network.realname))
+        if self.network.password is not None:
+            self.raw("PASS %s" % self.network.password)
         self.nick = self.network.nicks[0]
         self.raw("NICK %s" % self.nick)
         self.connected = True
@@ -106,8 +108,9 @@ class Network:
     ident = ''
     primary_channel = None
     name = ''
+    password = None
     
-    def __init__(self, server='', port=6667, nicks=None, realname='', ident='', primary_channel=None, name=''):
+    def __init__(self, server='', port=6667, nicks=None, realname='', ident='', primary_channel=None, name='', password=None):
         self.server = server
         self.port = port
         self.nicks = nicks
@@ -115,6 +118,7 @@ class Network:
         self.ident = ident
         self.primary_channel = primary_channel
         self.name = name
+        self.password = password
         
     def __str__(self):
         return self.name

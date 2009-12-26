@@ -307,7 +307,8 @@ def format_source(node):
     else:
         attribute = ''
     if node.name != 'root' and (node.parent.name != 'choose' or node.name != '|' or node.parent.children[0] is not node):
-        value = '~B\x03%s[%s%s]\x03~B' % (depth, node.name, attribute)
+        #value = '~B\x03%s[%s%s]\x03~B' % (depth, node.name, attribute)
+        value = '~B[%s%s]~B' % (node.name, attribute)
     else:
         value = ''
     if node.children:
@@ -315,7 +316,8 @@ def format_source(node):
         for child in node.children:
             value += format_source(child)
         if node.name != 'root' and node.name != '|':
-            value += '~B\x03%s[/%s]\x03~B' % (depth, node.name)
+            #value += '~B\x03%s[/%s]\x03~B' % (depth, node.name)
+            value += '~B[/%s]~B' % node.name
         return value
     else:
         return value

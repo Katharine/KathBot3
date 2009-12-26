@@ -95,7 +95,8 @@ def join(irc, origin, args):
         if len(user_modes) > 0 and user_modes[0][0]:
             modes += user_modes[0][0]
     
-    irc.raw("MODE %s +%s %s" % (channel, modes, (origin.nick + " ") * len(modes)))
+    if modes:
+        irc.raw("MODE %s +%s %s" % (channel, modes, (origin.nick + " ") * len(modes)))
 
 def automodes(network, channel):
     if automode.get(network) and automode[network.lower()].get(channel):

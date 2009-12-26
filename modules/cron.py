@@ -6,7 +6,7 @@ import os
 import traceback
 import modules
 
-JOB_RESOLUTION = 60 # How often we check why we're here.
+JOB_RESOLUTION = 1 # How often we check why we're here.
 
 class ClearCronJob(Exception): pass
 
