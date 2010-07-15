@@ -157,7 +157,7 @@ def message(irc, channel, origin, command, args):
         Accuracy = Placemark['AddressDetails']['Accuracy']
         irc_helpers.message(irc, target,"~B[Maps]~B A %s trip from '%s' to '%s' would cover an estimated %s." % (method, args[0], args[1], Distance))
         
-    elif command == 'time':
+    elif command == 'traveltime':
         #Example Input:
         #!time Walking '19 Scott Road, Prospect, CT, 06712' '19 Scott Road, Prospect, CT, 06712'
         if len(args) < 1:
