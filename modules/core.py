@@ -105,3 +105,6 @@ def check_prefix(line):
     if line.startswith("!"):
         return line[1:]
     return None
+    
+def get_primary_prefix():
+    return "!"
