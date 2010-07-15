@@ -158,5 +158,3 @@ def message(irc, channel, origin, command, args):
             else:
                 irch.message(irc, channel, matches.group(2).replace(r'\n', '\n'), tag='LSL')
                 irch.message(irc, channel, "Sleep: ~B%s~B seconds." % matches.group(1), tag='LSL')
-    elif command == 'uptime':
-        irch.message(irc, channel, Popen(["uptime"], stdout=PIPE).communicate()[0].strip())

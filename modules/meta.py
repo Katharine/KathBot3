@@ -20,4 +20,6 @@ def message(irc, channel, origin, command, args):
             size /= 1024
             suffix += 1
         
-        m('irc_helpers').message(irc, channel, u"Files: ~B%s~B · Lines of code: ~B%s~B · Longest line: ~B%s~B characters · Total size: ~B%s %s~B" % (files, lines, longest, size, suffixes[suffix]))
+        m('irc_helpers').message(irc, channel, u"Files: ~B%s~B · Lines of code: ~B%s~B · Longest line: ~B%s~B characters · Total size: ~B%s %s~B" % (files, lines, longest, size, suffixes[suffix]))    
+    elif command == 'uptime':
+        m('irc_helpers').message(irc, channel, Popen(["uptime"], stdout=PIPE).communicate()[0].strip())
