@@ -1,6 +1,8 @@
 from datetime import datetime
 import modules
 import networks
+import struct
+import socket
 
 USER_MODES = 'ovhqa'
 CHANNEL_MODES = 'cimnprstuzACGMKNOQRSTV'
@@ -8,6 +10,8 @@ ARG_MODES = 'befIjklL'
 PREFIX_MODES = {'~': 'q', '&': 'a', '@': 'o', '%': 'h', '+': 'v'}
 
 channels = {}
+
+known_mibbits = {}
 
 def init():
     add_hook('join', join)
@@ -35,6 +39,24 @@ def channel_list(irc, origin, args):
             irc.raw("NAMES %s" % channel)
             irc.raw("MODE %s" % channel)
 
+def resolve_mibbit(user):
+    if user.ident in known_mibbits:
+        user.hostname = known_mibbits[user.ident]
+        user.ident = 'mibbit'
+    else:
+        try:
+            packed_ip = struct.pack('!I', int(user.ident, 16))
+            dotted_ip = socket.inet_ntoa(packed_ip)
+            try:
+                hostname = socket.gethostbyaddr(dotted_ip)[0]
+            except:
+                hostname = dotted_ip
+            known_mibbits[user.ident] = hostname
+            user.ident = 'mibbit'
+            user.hostname = hostname
+        except Exception, e:
+            logger.warn("Unable to resolve mibbit address: %s" % e)
+
 def userhosts(irc, origin, args):
     data = args[1].strip().split(' ')
     for datum in data:
@@ -53,6 +75,8 @@ def userhosts(irc, origin, args):
                 user = channel.users[nick.lower()]
                 user.ident = ident
                 user.hostname = host
+                if user.hostname.endswith('mibbit.com'):
+                    resolve_mibbit(user)
             logger.debug("Updated ident/host for %s" % nick)
             
 
