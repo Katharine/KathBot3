@@ -1,0 +1,16 @@
+* {
+	font-family: Helvetica, sans-serif;
+}
+
+h2.command {
+	font-size: 1em;
+	margin-bottom: 0px;
+}
+
+p {
+	margin: 0px;
+}
+
+p.usage, .arg {
+	font-family: monospace;
+}
