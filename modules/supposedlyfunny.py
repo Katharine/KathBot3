@@ -5,8 +5,9 @@ from datetime import datetime
 from xml.sax.saxutils import unescape
 import re
 import random
+from subprocess import Popen, PIPE, STDOUT
 
-COMMANDS = frozenset(('fml', 'bash', 'foon'))
+COMMANDS = frozenset(('fml', 'bash', 'fortune'))
 
 def init():
     add_hook('message', message)
@@ -57,3 +58,8 @@ def message(irc, channel, origin, command, args):
         irch.message(irc,channel,'~B[bash]~B ~UFrom: http://www.bash.org/%s~U' % quote[0])
         for line in lines:
             irch.message(irc, channel, '~B[bash]~B %s' % line)
+    elif command == 'fortune':
+        command = ["fortune"]
+        if len(args) > 0:
+            command.append(args[0])
+        irch.message(irc, channel, Popen(command, stdout=PIPE, stderr=STDOUT).communicate()[0].rstrip().replace("\t", "    "), tag="Fortune")
