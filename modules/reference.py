@@ -120,9 +120,15 @@ def message(irc, channel, origin, command, args):
         irch.message(irc, channel, 'Pronunciation: %s' % pron, tag='Define')
         irch.message(irc, channel, format(matches.group(4).strip()), tag='Define')
     elif command == 'translate':
+        if len(args) == 0:
+            return
+        if '|' in args[0]:
+            langpair = args.pop(0)
+        else:
+            langpair = '|en'
         string = ' '.join(args)
         try:
-            data = load_url('http://ajax.googleapis.com/ajax/services/language/translate?v=1.0&q=%s&langpair=%%7Cen' % escapeurl(string.encode('utf-8')))
+            data = load_url(u'http://ajax.googleapis.com/ajax/services/language/translate?v=1.0&q=%s&langpair=%s' % (escapeurl(string.encode('utf-8')), langpair))
         except urllib2.HTTPError:
             irch.message(irc, channel, "Translation failed.")
             return
