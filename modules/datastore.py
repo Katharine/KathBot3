@@ -90,13 +90,13 @@ class KBDict(dict):
     def serialise(self, value):
         if isinstance(value, str):
             return value
-        elif isinstance(value, int) or isinstance(value, long):
-            return value.__repr__()
         elif isinstance(value, bool):
             if value:
                 return '__TRUE__'
             else:
                 return '__FALSE__'
+        elif isinstance(value, int) or isinstance(value, long):
+            return value.__repr__()
         elif isinstance(value, float):
             return str(value)
         elif value is None:
