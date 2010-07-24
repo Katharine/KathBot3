@@ -52,7 +52,7 @@ def message(irc, channel, origin, command, args):
         
         learning = m('datastore').channels[(irc, channel)].get('ai_learn', False)
         response_frequency = int(m('datastore').channels[(irc, channel)].get('ai_respond', 0))
-        m('irc_helpers').message(irc, channel, "Learning: %s. Response frequency: %i%%" % ('yes' if learning else 'no', response_frequency))
+        m('irc_helpers').message(irc, channel, "Learning: %s. Response frequency: %i%%" % (('yes' if learning else 'no'), response_frequency))
         m('irc_helpers').message(irc, channel, "I know ~B%i~B unique words, of which ~B%i~B are verbs. I have heard ~B%s~B words in total." % (len(index), len(verbs), total_words))
         m('irc_helpers').message(irc, channel, "The longest word is ~B%s~B. The most popular word is ~B%s~B (which has been used ~B%i~B times)." % (longest_word, most_popular, most_popular_uses))
         m('irc_helpers').message(irc, channel, "The most popular verb is ~B%s~B, and it's been used ~B%i~B times." % (most_popular_verb, verb_uses))
@@ -60,7 +60,7 @@ def message(irc, channel, origin, command, args):
     elif command == 'ailearn':
         enabled = (args[0].lower() == 'on') if len(args) else False
         m('datastore').channels[(irc, channel)]['ai_learn'] = enabled
-        m('irc_helpers').message(irc, channel, "Learning %s." % 'enabled' if enabled else 'disabled')
+        m('irc_helpers').message(irc, channel, "Learning %s." % ('enabled' if enabled else 'disabled'))
     elif command == 'airespond':
         try:
             frequency = int(args[0])
