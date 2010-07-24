@@ -37,5 +37,5 @@ def privmsg(irc, origin, args):
         xml.unlink()
         
         mins = length // 60
-        secs = length % 60
+        secs = str(length % 60).zfill(2)
         m('irc_helpers').message(irc, channel, u"~BTitle:~B %s · ~BLength:~B %s:%s · ~BUploader:~B %s\n~BDescription:~B %s" % (title, mins, secs, user, desc), tag='Video')
