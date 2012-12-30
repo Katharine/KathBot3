@@ -109,8 +109,9 @@ class Network:
     primary_channel = None
     name = ''
     password = None
+    skype = False
     
-    def __init__(self, server='', port=6667, nicks=None, realname='', ident='', primary_channel=None, name='', password=None):
+    def __init__(self, server='', port=6667, nicks=None, realname='', ident='', primary_channel=None, name='', password=None, skype=False):
         self.server = server
         self.port = port
         self.nicks = nicks
@@ -119,6 +120,7 @@ class Network:
         self.primary_channel = primary_channel
         self.name = name
         self.password = password
+        self.skype = skype
         
     def __str__(self):
         return self.name

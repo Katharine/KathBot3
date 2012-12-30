@@ -26,6 +26,7 @@ def init():
     add_hook('nick', nick)
     add_hook('324', initial_mode)
     add_hook('mode', mode)
+    add_hook('311', real_name)
     
     for network in networks.networks:
         irc = networks.networks[network]
@@ -79,6 +80,19 @@ def userhosts(irc, origin, args):
                     resolve_mibbit(user)
             logger.debug("Updated ident/host for %s" % nick)
             
+def real_name(irc, origin, args):
+    nick = args[1]
+    fullname = args[-1]
+    channels = nick_channels(irc, nick)
+    if channels:
+        for channame in channels:
+            logger.debug("Real name for %s in %s" % (nick, channame))
+            channel = network(irc)[channame]
+            user = channel.users[nick.lower()]
+            user.realname = fullname
+            if irc.network.skype:
+                user.nick = fullname # What will this break?
+        logger.debug("Updated real name for %s" % nick)
 
 def network(irc):
     if not channels.get(irc.network.name):
@@ -157,7 +171,9 @@ def userlist(irc, origin, args):
         user = create_user(irc, nick)
         channel.users[user.nick.lower()] = user
         if not user.hostname:
-            lookup.append(user.nick)
+            lookup.append(user.nick) 
+        if irc.network.skype and user.nick != irc.nick and (user.realname == user.ident or user.ident == ''):
+            irc.raw("WHOIS %s" % nick)
         logger.debug("Added nick %s to %s/%s" % (user.nick, irc.network, channel))
     if lookup:
         for i in range(0, len(lookup), 5):
@@ -263,8 +279,9 @@ class User(object):
     hostname = ''
     modes = None
     ident = ''
+    realname = ''
     
-    def __init__(self, nick='', hostname='', modes=None, ident=''):
+    def __init__(self, nick='', hostname='', modes=None, ident='', realname=None):
         self.modes = modes
         if self.modes is None:
             self.modes = set()
@@ -276,6 +293,7 @@ class User(object):
         self.nick = nick
         self.hostname = hostname
         self.ident = ident
+        self.realname = realname if realname is not None else nick
     
     def __str__(self):
         return '%s!%s@%s' % (self.nick, self.ident, self.hostname)
