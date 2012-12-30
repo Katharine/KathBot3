@@ -19,6 +19,10 @@ PORT_NUMBER = 8765
 class KBHTTPServer(BaseHTTPServer.HTTPServer, SocketServer.ThreadingMixIn):
     def shutdown(self):
         try:
+            self.socket.shutdown()
+        except:
+            logger.warning("Couldn't shut down socket.")
+        try:
             self.socket.close()
         except:
             pass
@@ -104,10 +108,10 @@ class WebServer(threading.Thread):
                 self.server.handle_request()
             except:
                 pass
+        self.server.shutdown()
     
     def shutdown(self):
         self.running = False
-        self.server.shutdown()
 
 server = None
 
@@ -134,7 +138,7 @@ def shutdown():
     server.shutdown()
     # This hack lets the server thread *actually* terminate.
     try:
-        f = urllib2.urlopen('http://127.0.0.1:%s/' % PORT_NUMBER)
+        f = urllib2.urlopen('http://127.0.0.1:%s/' % PORT_NUMBER, None, 2)
         f.read(1)
         f.close()
     except:
