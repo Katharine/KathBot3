@@ -16,6 +16,8 @@ web_handlers = {}
 
 PORT_NUMBER = 8765
 
+class FileNotFound(Exception): pass
+
 class KBHTTPServer(BaseHTTPServer.HTTPServer, SocketServer.ThreadingMixIn):
     def shutdown(self):
         try:
@@ -43,6 +45,16 @@ class KBHTTPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if not discard_body:
             self.wfile.write(output)
     
+    def get_postdata(self):
+        try:
+            return self._postdata
+        except AttributeError:
+            pass
+        length = int(self.headers['content-length'])
+        self._postdata = urlparse.parse_qs(self.rfile.read(length), keep_blank_values=True)
+        return self._postdata
+
+
     def do_something(self, method, discard_body=False):
         parts = urlparse.urlparse(self.path)
         self.path = parts[2]
@@ -70,10 +82,10 @@ class KBHTTPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 if method in web_handlers[requested_module]:
                     try:
                         output = web_handlers[requested_module][method](self)
-                        if output is None:
-                            self.send_error(404)
-                        else:
+                        if output is not None:
                             self.send_output(output, discard_body)
+                    except FileNotFound:
+                        self.send_error(404)
                     except Exception, message:
                         logger.error(traceback.format_exc())
                         self.send_error(500, str(message))
