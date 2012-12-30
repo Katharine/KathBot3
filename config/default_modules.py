@@ -25,7 +25,10 @@ modules = (
     'wmessage',
     'dyn_strstuff',
     'dyn_webstuff',
-    'dyn_persistence'
+    'dyn_persistence',
+    'help',
+    'youtubemeta',
+    'lua'
     #'lastfm',
     #'irclogger'
 )
