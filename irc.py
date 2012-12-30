@@ -29,7 +29,7 @@ class IRC(threading.Thread):
             logging.error("Couldn't connect: %s" % message)
             return
         logging.info("Connected.")
-        self.raw("USER %s 8 *: %s" % (self.network.ident, self.network.realname))
+        self.raw("USER %s 8 * :%s" % (self.network.ident, self.network.realname))
         if self.network.password is not None:
             self.raw("PASS %s" % self.network.password)
         self.nick = self.network.nicks[0]
