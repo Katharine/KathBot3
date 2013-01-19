@@ -249,10 +249,14 @@ class LuaModule(object):
         }""")
 
         self.env.kb = self.lua.table()
-        self.env.kb['_private'] = self.lua.table(
-            webget=self.lua_webget
+        self.lua.globals()['kb_private'] = self.lua.table(
+            webget=self.lua_webget,
+            schedule_at=self.lua_schedule_at,
+            schedule_cron=self.lua_schedule_cron
         )
-        self.env.kb['webget'] = self.lua.eval('function(url, callback) env.kb._private.webget(url, callback) end')
+        self.env.kb['webget'] = self.lua.eval('function(url, callback) kb_private.webget(url, callback) end')
+        self.env.kb['schedule_at'] = self.lua.eval('function(when, user_data, callback) kb_private.schedule_at(when, user_data, callback) end')
+        self.env.kb['schedule_cron'] = self.lua.eval('function (period, user_data, callback) kb_private.schedule_cron(period, user_data, callback) end')
 
         self.events = self.lua.table()
         self.env.events = self.events
@@ -337,6 +341,22 @@ class LuaModule(object):
             else:
                 callback(True, result)
         threading.Thread(target=do_callback).start()
+
+    def lua_schedule_at(self, when, user_data, callback):
+        try:
+            m('cron').add_at(when, callback, when, user_data)
+        except ModuleNotLoaded:
+            return False
+        else:
+            return True
+
+    def lua_schedule_cron(self, period, user_data, callback):
+        try:
+            m('cron').add_cron(period, callback, user_data)
+        except ModuleNotLoaded:
+            return False
+        else:
+            return True
 
     def stop(self):
         self.lua.globals().running = 0
