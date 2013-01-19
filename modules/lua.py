@@ -241,10 +241,10 @@ class LuaModule(object):
             table=table,
             math=math,
             os={
-                clock=clock,
-                date=date,
-                difftime=difftime,
-                time=time
+                clock=os.clock,
+                date=os.date,
+                difftime=os.difftime,
+                time=os.time
             }
         }""")
 
