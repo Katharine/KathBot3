@@ -63,7 +63,7 @@ class CronManager(threading.Thread):
                     if job.module in modules.mods:
                         threading.Thread(target=job.handler, args=job.args, name="AtJob/%s" % job.module).start()
                 except Exception, msg:
-                    logger.error("Error running cronjob for %s: %s" % (job.module, traceback.format_exc()))
+                    logger.error("Error running atjob for %s: %s" % (job.module, traceback.format_exc()))
     
     def add_at(self, module, at, handler, args):
         job = AtJob(module=module, at=at, handler=handler, args=args)
