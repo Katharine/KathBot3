@@ -50,7 +50,7 @@ def editor(request):
                 if module in interpreter.lua_modules:
                     interpreter.lua_modules[module].stop()
                     try:
-                        interpreter.load_lua_module(module)
+                        interpreter.load_module(module)
                     except LuaError as e:
                         return json.dumps({"saved": True, "running": False, "lua_error": str(e)})
                     return json.dumps({"saved": True, "running": True})
@@ -62,16 +62,12 @@ def editor(request):
                 except:
                     pass
                 try:
-                    interpreter.load_lua_module(module)
+                    interpreter.load_module(module)
                 except LuaError as e:
                     return json.dumps({'running': False, 'lua_error': str(e)})
                 return json.dumps({'running': True})
             elif action == 'unload':
-                try:
-                    interpreter.lua_modules[module].stop()
-                except:
-                    pass
-                del interpreter.lua_modules[module]
+                interpreter.unload_module(module)
                 return json.dumps({'running': False})
 
     raise m('webserver').FileNotFound()

@@ -11,7 +11,7 @@ def get_stored_modules():
     modules = sorted(x[:-4] for x in os.listdir('data/lua/'))
     return modules
 
-def load_lua_module(m):
+def load_module(m):
     with open('data/lua/%s.lua' % m.replace('/','_')) as f:
         source = f.read()
     l = LuaModule()
@@ -26,9 +26,34 @@ def load_lua_module(m):
     else:
         lua_modules[m] = l
 
+def unload_module(m):    
+    try:
+        lua_modules[module].stop()
+    except:
+        pass
+    del lua_modules[module]
+
 def handle_message(irc, channel, origin, command, args):
     for n in lua_modules:
         lua_modules[n].event_message(irc, channel, origin, command, args)
+
+def execute(l):
+        try:
+            lua = LuaModule()
+            output = lua.run(l)
+        except LuaError as e:
+            raise
+        else:
+            try:
+                output = list(output)
+                success = output.pop(0)
+            except:
+                success = output
+                output = []
+            if success:
+                return output
+            else:
+                raise LuaError(', '.join(output))
 
 class LuaModule(object):
     def __init__(self):
@@ -97,8 +122,8 @@ class LuaModule(object):
             end, "", 1)
         """)
 
-    def filter(self, object, attribute, is_setting):
-        raise AttributeError("forbidden")
+    def filter(self, o, attribute, is_setting):
+        raise AttributeError("forbidden: %s.%s" % (o, attribute))
 
     def irc_wrapper(self, irc):
         wrapper = self.lua.table()
